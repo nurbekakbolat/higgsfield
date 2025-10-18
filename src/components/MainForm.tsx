@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import OpenAI from "openai";
+import { generateImages } from "./image_jobs";
+import { pollManyJobsUntilComplete } from "./poll_result";
+import Transition from "./Transition";
 
 const DEFAULT_STYLE =
   "clean corporate flat infographic dashboard style, soft neutral/pastel palette (sand, sage, slate), modern sans-serif typography, subtle gradients, high whitespace";
@@ -54,6 +57,7 @@ export default function SlidePromptGenerator() {
   const [prompts, setPrompts] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [imageUrls, setImageUrls] = useState<string[]>([])
 
   const openai = new OpenAI({
     apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY!,
@@ -88,6 +92,13 @@ export default function SlidePromptGenerator() {
 
       const arr = JSON.parse(jsonText);
       if (!Array.isArray(arr)) throw new Error("Expected a JSON array.");
+
+      const jobList = await generateImages(arr)
+
+      const urls = await pollManyJobsUntilComplete(jobList)
+
+      console.log("urls", urls)
+      setImageUrls(urls)
       setPrompts(arr as string[]);
     } catch (e: any) {
       console.error(e);
@@ -153,6 +164,7 @@ export default function SlidePromptGenerator() {
           </ul>
         </div>
       )}
+      <Transition imageUrls={imageUrls}/>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type JobStatus = "queued" | "processing" | "completed" | "failed" | "error";
 
@@ -19,21 +19,17 @@ interface JobItem {
 
 const HIGGSFIELD_BASE = "https://platform.higgsfield.ai/v1";
 
-export default function Transition() {
+export default function Transition({
+  imageUrls
+}: {
+  imageUrls: string[]
+}) {
   const [jobs, setJobs] = useState<JobItem[]>([]);
   const [running, setRunning] = useState(false);
-
-  const imageUrls = [
-    "https://d3u0tzju9qaucj.cloudfront.net/435946d1-10e6-491d-8814-f9e49f701651/b510c959-56a4-4e79-98a8-e6c5bdc47c7b_min.webp",
-    "https://d3u0tzju9qaucj.cloudfront.net/435946d1-10e6-491d-8814-f9e49f701651/d23ee66b-ef11-45ad-a38e-484c47728a4e_min.webp",
-    "https://d3snorpfx4xhv8.cloudfront.net/d5245104-ba57-4942-a7d9-d53936d25c09/8e914a5f-7f0d-4be6-9a94-d0dd9c000008.jpeg",
-    "https://d3snorpfx4xhv8.cloudfront.net/d5245104-ba57-4942-a7d9-d53936d25c09/0ac85a6d-1f3e-44cd-a0c4-f5d66bd212e5.png",
-  ];
-
   const headers = {
     "Content-Type": "application/json",
-    "hf-api-key": process.env.NEXT_PUBLIC_HIGGSFIELD_KEY!,
-    "hf-secret": process.env.NEXT_PUBLIC_HIGGSFIELD_SECRET!,
+    "hf-api-key": process.env.NEXT_PUBLIC_HF_API_KEY!,
+    "hf-secret": process.env.NEXT_PUBLIC_HF_API_SECRET!,
   };
 
   const buildPairs = (urls: string[]): Pair[] => {
@@ -101,7 +97,7 @@ export default function Transition() {
   };
 
   const runAll = async () => {
-    if (running) return;
+    if (running || !imageUrls.length) return;
     setRunning(true);
     setJobs([]);
 
@@ -156,15 +152,21 @@ export default function Transition() {
     setRunning(false);
   };
 
+  useEffect(() => {
+    if (!imageUrls.length) return;
+
+    runAll()
+  }, [imageUrls])
+
   return (
     <div className="flex flex-col gap-6">
-      <button
+      {/* <button
         onClick={runAll}
         disabled={running}
         className="px-4 py-2 rounded bg-black text-white disabled:opacity-50"
       >
         {running ? "Working..." : "Generate Transitions"}
-      </button>
+      </button> */}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {jobs.map((job, idx) => (
