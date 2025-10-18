@@ -220,16 +220,6 @@ async function generatePrompts() {
             className="w-24 border p-2 rounded-md text-black"
           />
         </div>
-<input
-  type="file"
-  className="text-gray-600"
-  accept=".pdf,.pptx"
-  onChange={e => {
-    const f = e.target.files?.[0] ?? null;
-    setFile(f);
-    setUseFileMode(!!f);
-  }}
-/>
         {/* ⬇️ NEW: totally optional PDF picker, nothing else changes */}
         <input
           type="file"
