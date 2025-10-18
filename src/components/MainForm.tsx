@@ -11,35 +11,59 @@ const SlidePromptsSchema = z.object({
 });
 
 const GPT_PROMPT_ENHANCE = `
-You are a senior prompt engineer for presentation decks.
+You are producing COMPLETE Seedream 4.0 image prompts for slides. The image model has ZERO MEMORY.
 
-Goal:
-Turn a vague topic into a numbered JSON array of COMPLETE, SELF-CONTAINED image-generation prompts for a model with NO MEMORY.
+OUTPUT: return ONLY a valid JSON array of strings; each string is one full prompt. No prose, no keys.
 
-NON-NEGOTIABLE RULES FOR EVERY SLIDE PROMPT
-1) Restate full visual context each time:
-   - "PowerPoint slide background in <style>, 16:9 landscape"
-   - If no user style: "clean corporate flat infographic dashboard style, soft neutral/pastel palette (sand, sage, slate), modern sans-serif typography"
-2) Include exact TEXT STRINGS to render (titles, axis labels, captions, legend labels). Keep them concise and readable.
-3) Spatial contract (must be explicit):
-   - For EVERY element, state location using anchors (top-left, top-right, center-left, bottom strip, etc.)
-   - For charts: give chart type, axes labels, tick direction, legend position, color mapping, and data bins or values.
-   - For maps: specify projection (simplified flat world), target regions, exact color bins and thresholds, legend contents/position, and where not to color.
-   - For grids/splits: define panel sizes or ratios and which side holds what.
-4) Provide concrete values (plausible samples) for charts/maps; keep units consistent.
-5) Always append: "Draw all listed text EXACTLY as written."
-6) Output MUST be a valid JSON array of strings (each string is one complete slide prompt). No extra keys or commentary.
+ABSOLUTE RULES FOR EVERY SLIDE
+1) Start with: "PowerPoint slide background in <STYLE>, 16:9 landscape".
+   - If the user didn't specify, use: "${DEFAULT_STYLE}".
+   - Repeat the SAME style in every slide.
+
+2) Include ALL TEXT to render (titles, axis labelsnpm i pdfjs-dist, legend keys, captions) and ALL DATA.
+   - Use concise English unless user specifies another language.
+   - Use numerals (never spell out numbers); one decimal max where relevant.
+   - If a range of years is referenced, provide a contiguous year:value list for EVERY year.
+   - No placeholders like "...", "etc", "N/A". No invented “model knowledge” beyond the dataset you output.
+
+3) Spatial contract: explicitly place everything with anchors and sizes/ratios.
+   - Examples: "TITLE top-left:", "legend bottom-right:", "left panel 60% width:", "right panel 40% width:", "empty right gutter for bullets".
+   - For charts: chart type, axes labels, tick labels, legend position, color mapping, and explicit DATA values.
+   - For maps: projection = "simplified flat world"; define which regions get which color bins; include a legend and its position.
+
+4) Consistency & tone: professional presentation; avoid animals/people unless requested.
+
+5) End every slide with: "Draw all listed text EXACTLY as written."
+
+6) Respect requested slide count (default 6).
+
+FORMAT INSIDE EACH PROMPT (use these section tags verbatim):
+STYLE:
+TITLE:
+LAYOUT:
+CHART/MAP/GRID:
+DATA:
+AXES:
+LEGEND:
+COLORS:
+CAPTION:
+CONSTRAINTS: Draw all listed text EXACTLY as written.
 `;
-
 
 export default function SlidePromptGenerator() {
   const [topic, setTopic] = useState("");
+  const [style, setStyle] = useState("");
+  const [count, setCount] = useState(6);
   const [prompts, setPrompts] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-
+  const [error, setError] = useState<string | null>(null);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  // ⬇️ NEW: optional PDF file, only used if present
+  const [pdfFile, setPdfFile] = useState<File | null>(null); // optional
+  
   const openai = new OpenAI({
     apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY!,
-    dangerouslyAllowBrowser: true, // because we’re calling from client side
+    dangerouslyAllowBrowser: true,
   });
 
 async function generatePrompts() {
@@ -68,41 +92,144 @@ async function generatePrompts() {
   } finally {
     setLoading(false);
   }
-}
 
+  async function generatePrompts() {
+    if (!topic.trim()) return;
+    setLoading(true);
+    setPrompts([]);
+    setError(null);
+
+    const userMsg =
+      `Topic: ${topic.trim()}\n` +
+      (style.trim() ? `Style: ${style.trim()}\n` : "Style: (default)\n") +
+      `Slide count: ${count}`;
+
+    try {
+      let raw = "[]";
+
+      if (pdfFile) {
+        // -------- NEW: upload PDF and call Responses API with input_file --------
+        const uploaded = await openai.files.create({
+          file: pdfFile,
+          purpose: "assistants", // required for file_search and multimodal
+        });
+
+        const res = await openai.responses.create({
+          model: "gpt-4.1-mini",
+          temperature: 0.3,
+          input: [
+            {
+              role: "system",
+              content: [{ type: "input_text", text: GPT_PROMPT_ENHANCE }],
+            },
+            {
+              role: "user",
+              content: [
+                { type: "input_text", text: userMsg },
+                { type: "input_file", file_id: uploaded.id }, // ← the PDF itself
+              ],
+            },
+          ],
+        });
+
+        raw = getOutputText(res)?.trim() || "[]";
+      } else {
+        // -------- fallback: your existing Chat Completions flow --------
+        const res = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          temperature: 0.3,
+          messages: [
+            { role: "system", content: GPT_PROMPT_ENHANCE },
+            { role: "user", content: userMsg },
+          ],
+        });
+        raw = res.choices[0].message?.content?.trim() || "[]";
+      }
+
+      // strip ```json fences if present
+      const jsonText = raw.replace(/^```json\s*/i, "").replace(/```$/i, "");
+      const arr = JSON.parse(jsonText);
+      if (!Array.isArray(arr)) throw new Error("Expected a JSON array.");
+
+      const jobList = await generateImages(arr);
+      const urls = await pollManyJobsUntilComplete(jobList);
+
+      setImageUrls(urls);
+      setPrompts(arr);
+    } catch (e: any) {
+      console.error(e);
+      setError(e?.message ?? "Failed to generate prompts.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="max-w-2xl mx-auto mt-12 p-6 border rounded-lg bg-white shadow-sm">
-      <h1 className="text-2xl font-bold mb-4 text-gray-400">AI Slide Prompt Generator</h1>
+      <h1 className="text-2xl font-bold mb-4 text-gray-800">AI Slide Prompt Generator</h1>
 
-      <input
-        type="text"
-        value={topic}
-        onChange={(e) => setTopic(e.target.value)}
-        placeholder='e.g. "create 6 slides about global warming"'
-        className="w-full border p-3 rounded-md mb-4 text-black "
-      />
+      <div className="space-y-3">
+        <input
+          type="text"
+          value={topic}
+          onChange={(e) => setTopic(e.target.value)}
+          placeholder='e.g. "create 6 slides about global warming"'
+          className="w-full border p-3 rounded-md text-black"
+        />
 
-      <button
-        onClick={generatePrompts}
-        disabled={loading}
-        className="bg-black text-white px-4 py-2 rounded-md hover:bg-gray-800 disabled:opacity-60"
-      >
-        {loading ? "Generating..." : "Generate Prompts"}
-      </button>
+        <input
+          type="text"
+          value={style}
+          onChange={(e) => setStyle(e.target.value)}
+          placeholder='Optional style, e.g. "isometric 3D corporate", or leave blank'
+          className="w-full border p-3 rounded-md text-black"
+        />
+
+        <div className="flex items-center gap-3">
+          <label className="text-gray-700">Slides:</label>
+          <input
+            type="number"
+            min={1}
+            max={20}
+            value={count}
+            onChange={(e) => setCount(parseInt(e.target.value || "6", 10))}
+            className="w-24 border p-2 rounded-md text-black"
+          />
+        </div>
+
+        {/* ⬇️ NEW: totally optional PDF picker, nothing else changes */}
+        <input
+          type="file"
+          accept="application/pdf"
+          onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)}
+          className="w-full border p-2 rounded-md text-black"
+        />
+
+        <button
+          onClick={generatePrompts}
+          disabled={loading}
+          className="bg-black text-white px-4 py-2 rounded-md hover:bg-gray-800 disabled:opacity-60"
+        >
+          {loading ? "Generating..." : "Generate Prompts"}
+        </button>
+      </div>
+
+      {error && <p className="mt-4 text-red-600">{error}</p>}
 
       {prompts.length > 0 && (
         <div className="mt-6 space-y-2">
-          <h2 className="text-lg font-semibold text-gray-400">Generated Slide Prompts</h2>
+          <h2 className="text-lg font-semibold text-gray-700">Generated Slide Prompts</h2>
           <ul className="list-disc list-inside text-gray-800">
             {prompts.map((p, i) => (
-              <li key={i}>
+              <li key={i} className="whitespace-pre-wrap">
                 <strong>Slide {i + 1}:</strong> {p}
               </li>
             ))}
           </ul>
         </div>
       )}
+
+      <Transition imageUrls={imageUrls} />
     </div>
   );
 }
