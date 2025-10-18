@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import OpenAI from "openai";
-import { generateImages } from "./image_jobs";
-import { pollManyJobsUntilComplete } from "./poll_result";
-import Transition from "./Transition";
+import { zodResponseFormat } from "openai/helpers/zod";
+import { z } from "zod";
 
-const DEFAULT_STYLE =
-  "clean corporate flat infographic dashboard style, soft neutral/pastel palette (sand, sage, slate), modern sans-serif typography, subtle gradients, high whitespace";
+// Zod schema for structured output
+const SlidePromptsSchema = z.object({
+  prompts: z.array(z.string()),
+});
 
 const GPT_PROMPT_ENHANCE = `
 You are producing COMPLETE Seedream 4.0 image prompts for slides. The image model has ZERO MEMORY.
@@ -65,13 +66,31 @@ export default function SlidePromptGenerator() {
     dangerouslyAllowBrowser: true,
   });
 
-  function getOutputText(res: any): string {
-    // modern SDK exposes .output_text; fallback to digging if needed
-    return (res as any).output_text
-      ?? (res?.output?.map((o: any) =>
-           o?.content?.map((c: any) => c?.text?.value).filter(Boolean).join("\n")
-         ).join("\n"))
-      ?? "";
+async function generatePrompts() {
+  if (!topic.trim()) return;
+  setLoading(true);
+  setPrompts([]);
+
+  try {
+    // Use structured output with Zod schema
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: GPT_PROMPT_ENHANCE },
+        { role: "user", content: topic },
+      ],
+      response_format: zodResponseFormat(SlidePromptsSchema, "slide_prompts"),
+    });
+
+    // Parse the structured response
+    const result = JSON.parse(completion.choices[0].message?.content || "{}");
+    const slides = result.prompts || [];
+    console.log("Generated slides:", slides);
+    setPrompts(slides);
+  } catch (err) {
+    console.error("Error generating prompts:", err);
+  } finally {
+    setLoading(false);
   }
 
   async function generatePrompts() {
