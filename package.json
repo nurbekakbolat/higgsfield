@@ -9,9 +9,11 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ffmpeg/ffmpeg": "^0.12.15",
     "next": "15.5.6",
     "openai": "^6.5.0",
     "pdfjs-dist": "^3.11.174",
+    "pdf-lib": "^1.17.1",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "zod": "^3.25.76"

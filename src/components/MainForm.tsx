@@ -9,6 +9,13 @@ import { z } from "zod";
 const SlidePromptsSchema = z.object({
   prompts: z.array(z.string()),
 });
+import { generateImages } from "./image_jobs";
+import { pollManyJobsUntilComplete } from "./poll_result";
+import Transition from "./Transition";
+import { splitAndUpload } from "~/helpers/splitAndUpload";
+
+const DEFAULT_STYLE =
+  "clean corporate flat infographic dashboard style, soft neutral/pastel palette (sand, sage, slate), modern sans-serif typography, subtle gradients, high whitespace";
 
 const GPT_PROMPT_ENHANCE = `
 You are producing COMPLETE Seedream 4.0 image prompts for slides. The image model has ZERO MEMORY.
@@ -61,6 +68,9 @@ export default function SlidePromptGenerator() {
   // ⬇️ NEW: optional PDF file, only used if present
   const [pdfFile, setPdfFile] = useState<File | null>(null); // optional
   
+  const [file, setFile] = useState<File | null>(null);
+const [useFileMode, setUseFileMode] = useState(false);
+
   const openai = new OpenAI({
     apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY!,
     dangerouslyAllowBrowser: true,
@@ -103,6 +113,20 @@ async function generatePrompts() {
       `Topic: ${topic.trim()}\n` +
       (style.trim() ? `Style: ${style.trim()}\n` : "Style: (default)\n") +
       `Slide count: ${count}`;
+    if (useFileMode && file) {
+  try {
+    setLoading(true);
+    const urls = await splitAndUpload(file);
+    setImageUrls(urls);
+    setPrompts([]); // skip prompt generation
+  } catch (err) {
+    console.error(err);
+    setError("Failed to process or upload file");
+  } finally {
+    setLoading(false);
+  }
+  return;
+}
 
     try {
       let raw = "[]";
@@ -196,7 +220,16 @@ async function generatePrompts() {
             className="w-24 border p-2 rounded-md text-black"
           />
         </div>
-
+<input
+  type="file"
+  className="text-gray-600"
+  accept=".pdf,.pptx"
+  onChange={e => {
+    const f = e.target.files?.[0] ?? null;
+    setFile(f);
+    setUseFileMode(!!f);
+  }}
+/>
         {/* ⬇️ NEW: totally optional PDF picker, nothing else changes */}
         <input
           type="file"

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { concatVideosBrowser } from "~/helpers/concatVideos";
 
 type JobStatus = "queued" | "processing" | "completed" | "failed" | "error";
 
@@ -22,6 +23,8 @@ const HIGGSFIELD_BASE = "https://platform.higgsfield.ai/v1";
 export default function Transition({ imageUrls }: { imageUrls: string[] }) {
   const [jobs, setJobs] = useState<JobItem[]>([]);
   const [running, setRunning] = useState(false);
+  const [mergedUrl, setMergedUrl] = useState<string | null>(null);
+  const [merging, setMerging] = useState(false);
 
   const headers = {
     "Content-Type": "application/json",
@@ -103,6 +106,7 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
   const runAllParallel = async () => {
     if (running || !imageUrls.length) return;
     setRunning(true);
+  setMergedUrl(null);
 
     const pairs = buildPairs(imageUrls);
 
@@ -159,6 +163,24 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageUrls.join("|")]); // re-run if list changes content
 
+   useEffect(() => {
+    const allDone = jobs.length > 0 && jobs.every((j) => j.status === "completed" && j.url);
+  if (!allDone || mergedUrl) return; 
+
+    const urls = jobs.map((j) => j.url!) as string[];
+    (async () => {
+      try {
+        setMerging(true);
+        const blob = await concatVideosBrowser(urls);
+        setMergedUrl(URL.createObjectURL(blob));
+      } catch (e) {
+        console.error("Concat failed:", e);
+      } finally {
+        setMerging(false);
+      }
+    })();
+  }, [jobs]);
+
   return (
     <div className="flex flex-col gap-6">
       {/* If you want manual trigger instead of auto-run, uncomment:
@@ -194,6 +216,14 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
           </div>
         ))}
       </div>
+            {/* Merged video */}
+      {merging && <p className="text-gray-500">Merging all transitions...</p>}
+      {mergedUrl && (
+        <div className="mt-6">
+          <h2 className="text-lg font-semibold text-gray-700 mb-2">Merged Video</h2>
+          <video src={mergedUrl} controls autoPlay loop className="w-full rounded" />
+        </div>
+      )}
     </div>
   );
 }
