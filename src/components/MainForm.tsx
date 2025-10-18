@@ -4,15 +4,14 @@ import { useState } from "react";
 import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { z } from "zod";
-
-// Zod schema for structured output
-const SlidePromptsSchema = z.object({
-  prompts: z.array(z.string()),
-});
 import { generateImages } from "./image_jobs";
 import { pollManyJobsUntilComplete } from "./poll_result";
 import Transition from "./Transition";
 import { splitAndUpload } from "~/helpers/splitAndUpload";
+
+const SlidePromptsSchema = z.object({
+  prompts: z.array(z.string()),
+});
 
 const DEFAULT_STYLE =
   "clean corporate flat infographic dashboard style, soft neutral/pastel palette (sand, sage, slate), modern sans-serif typography, subtle gradients, high whitespace";
@@ -57,6 +56,15 @@ CAPTION:
 CONSTRAINTS: Draw all listed text EXACTLY as written.
 `;
 
+function getOutputText(res: any): string {
+    // modern SDK exposes .output_text; fallback to digging if needed
+    return (res as any).output_text
+      ?? (res?.output?.map((o: any) =>
+           o?.content?.map((c: any) => c?.text?.value).filter(Boolean).join("\n")
+         ).join("\n"))
+      ?? "";
+  }
+
 export default function SlidePromptGenerator() {
   const [topic, setTopic] = useState("");
   const [style, setStyle] = useState("");
@@ -68,9 +76,6 @@ export default function SlidePromptGenerator() {
   // ⬇️ NEW: optional PDF file, only used if present
   const [pdfFile, setPdfFile] = useState<File | null>(null); // optional
   
-  const [file, setFile] = useState<File | null>(null);
-const [useFileMode, setUseFileMode] = useState(false);
-
   const openai = new OpenAI({
     apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY!,
     dangerouslyAllowBrowser: true,
@@ -81,8 +86,54 @@ async function generatePrompts() {
   setLoading(true);
   setPrompts([]);
 
-  try {
-    // Use structured output with Zod schema
+      const userMsg =
+      `Topic: ${topic.trim()}\n` +
+      (style.trim() ? `Style: ${style.trim()}\n` : "Style: (default)\n") +
+      `Slide count: ${count}`;
+
+try {
+  let slides: string[] = [];
+
+  if (pdfFile) {
+    // Upload + run Responses API
+    const uploaded = await openai.files.create({
+      file: pdfFile,
+      purpose: "assistants",
+    });
+
+    const res = await openai.responses.create({
+      model: "gpt-4.1-mini",
+      temperature: 0.3,
+      input: [
+        { role: "system", content: [{ type: "input_text", text: GPT_PROMPT_ENHANCE }] },
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: userMsg },
+            { type: "input_file", file_id: uploaded.id },
+          ],
+        },
+      ],
+    });
+
+    // Normalize text output
+    const rawText =
+      getOutputText(res)?.trim() ||
+      res.output?.[0]?.content?.[0]?.text?.trim() ||
+      "";
+
+    // Try parsing JSON array
+    try {
+      slides = JSON.parse(rawText);
+    } catch {
+      // fallback: extract from ["..."] style
+      const maybeArr = rawText.match(/\[(.|\n)*\]/);
+      slides = maybeArr ? JSON.parse(maybeArr[0]) : [];
+    }
+
+    setPrompts(slides);
+  } else {
+    // Text-only Zod flow
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -92,101 +143,24 @@ async function generatePrompts() {
       response_format: zodResponseFormat(SlidePromptsSchema, "slide_prompts"),
     });
 
-    // Parse the structured response
     const result = JSON.parse(completion.choices[0].message?.content || "{}");
-    const slides = result.prompts || [];
-    console.log("Generated slides:", slides);
+    slides = result.prompts || [];
     setPrompts(slides);
-  } catch (err) {
-    console.error("Error generating prompts:", err);
-  } finally {
-    setLoading(false);
   }
 
-  async function generatePrompts() {
-    if (!topic.trim()) return;
-    setLoading(true);
-    setPrompts([]);
-    setError(null);
-
-    const userMsg =
-      `Topic: ${topic.trim()}\n` +
-      (style.trim() ? `Style: ${style.trim()}\n` : "Style: (default)\n") +
-      `Slide count: ${count}`;
-    if (useFileMode && file) {
-  try {
-    setLoading(true);
-    const urls = await splitAndUpload(file);
+  if (slides.length > 0) {
+    const jobList = await generateImages(slides);
+    const urls = await pollManyJobsUntilComplete(jobList);
     setImageUrls(urls);
-    setPrompts([]); // skip prompt generation
-  } catch (err) {
-    console.error(err);
-    setError("Failed to process or upload file");
-  } finally {
-    setLoading(false);
   }
-  return;
+} catch (err: any) {
+  console.error(err);
+  setError(err.message ?? "Prompt generation failed.");
+} finally {
+  setLoading(false);
 }
 
-    try {
-      let raw = "[]";
-
-      if (pdfFile) {
-        // -------- NEW: upload PDF and call Responses API with input_file --------
-        const uploaded = await openai.files.create({
-          file: pdfFile,
-          purpose: "assistants", // required for file_search and multimodal
-        });
-
-        const res = await openai.responses.create({
-          model: "gpt-4.1-mini",
-          temperature: 0.3,
-          input: [
-            {
-              role: "system",
-              content: [{ type: "input_text", text: GPT_PROMPT_ENHANCE }],
-            },
-            {
-              role: "user",
-              content: [
-                { type: "input_text", text: userMsg },
-                { type: "input_file", file_id: uploaded.id }, // ← the PDF itself
-              ],
-            },
-          ],
-        });
-
-        raw = getOutputText(res)?.trim() || "[]";
-      } else {
-        // -------- fallback: your existing Chat Completions flow --------
-        const res = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          temperature: 0.3,
-          messages: [
-            { role: "system", content: GPT_PROMPT_ENHANCE },
-            { role: "user", content: userMsg },
-          ],
-        });
-        raw = res.choices[0].message?.content?.trim() || "[]";
-      }
-
-      // strip ```json fences if present
-      const jsonText = raw.replace(/^```json\s*/i, "").replace(/```$/i, "");
-      const arr = JSON.parse(jsonText);
-      if (!Array.isArray(arr)) throw new Error("Expected a JSON array.");
-
-      const jobList = await generateImages(arr);
-      const urls = await pollManyJobsUntilComplete(jobList);
-
-      setImageUrls(urls);
-      setPrompts(arr);
-    } catch (e: any) {
-      console.error(e);
-      setError(e?.message ?? "Failed to generate prompts.");
-    } finally {
-      setLoading(false);
-    }
-  }
+}
 
   return (
     <div className="max-w-2xl mx-auto mt-12 p-6 border rounded-lg bg-white shadow-sm">
@@ -256,3 +230,4 @@ async function generatePrompts() {
     </div>
   );
 }
+
