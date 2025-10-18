@@ -6,6 +6,7 @@ export interface HiggsfieldResponse {
     id: string;
     job_set_type: string;
     status: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     results: any;
   }>;
   input_params: {

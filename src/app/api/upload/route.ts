@@ -8,7 +8,6 @@ export async function POST(req: Request) {
 
     const upstream = new FormData();
     upstream.append("image", file);
-    console.log("process.env.IMGBB_KEY", process.env.IMGBB_KEY)
     const url = `https://api.imgbb.com/1/upload?key=${process.env.IMGBB_KEY}`;
 
     const res = await fetch(url, {
@@ -19,7 +18,6 @@ export async function POST(req: Request) {
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok || !data.success) {
-      console.error("ImgBB upload failed:", res.status, data);
       return new Response(
         JSON.stringify({ error: "Upload failed", details: data }),
         { status: 500 }
@@ -29,7 +27,7 @@ export async function POST(req: Request) {
     // Return display_url or direct image URL
     const imageUrl = data?.data?.display_url || data?.data?.url;
     return Response.json({ url: imageUrl });
-  } catch (err: any) {
+  } catch (err) {
     console.error("Upload error:", err);
     return new Response("Internal Server Error", { status: 500 });
   }

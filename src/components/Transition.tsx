@@ -45,8 +45,8 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
       headers,
       body: JSON.stringify({
         params: {
-prompt: "generate smooth transition between two slides, keep all text and typography fixed and legible, do NOT morph or distort text",
-          duration: 10,
+          prompt: "generate smooth transition between two slides, keep all text and typography fixed and legible, do NOT morph or distort text",
+          duration: 6,
           resolution: "1080",
           input_image: { type: "image_url", image_url: pair.start },
           input_image_end: { type: "image_url", image_url: pair.end },
@@ -119,8 +119,10 @@ prompt: "generate smooth transition between two slides, keep all text and typogr
         const { jobSetId, initialStatus } = await submitPair(pair);
         updateJobAt(idx, { id: jobSetId, status: initialStatus });
         return { idx, jobSetId, status: initialStatus as JobStatus, ok: true as const };
-      } catch (e: any) {
-        updateJobAt(idx, { status: "failed", error: e?.message ?? "Submit failed" });
+      } catch (e) {
+        console.error(e)
+
+        updateJobAt(idx, { status: "failed", error: "Submit failed" });
         return { idx, ok: false as const };
       }
     });
@@ -147,8 +149,9 @@ prompt: "generate smooth transition between two slides, keep all text and typogr
         try {
           const { status, url } = await pollUntilDone(s.jobSetId, 3000, 1_200_000);
           updateJobAt(s.idx, { status, url, error: status === "completed" ? undefined : "Generation failed" });
-        } catch (e: any) {
-          updateJobAt(s.idx, { status: "failed", error: e?.message ?? "Polling failed" });
+        } catch (e) {
+          console.error(e)
+          updateJobAt(s.idx, { status: "failed", error: "Polling failed" });
         }
       });
 

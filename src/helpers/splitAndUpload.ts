@@ -9,10 +9,9 @@ export async function uploadViaProxy(file: File): Promise<string> {
   return data.url;
 }
 
-
 export async function splitAndUpload(file: File): Promise<string[]> {
   if (file.type !== "application/pdf") {
-    throw new Error("Only PDF files supported for now.");
+    throw new Error("Only PDF files supported.");
   }
 
   const uploadedUrls: string[] = [];
@@ -37,11 +36,11 @@ export async function splitAndUpload(file: File): Promise<string[]> {
 
     const pngFile = new File([blob], `page-${i}.png`, { type: "image/png" });
     try {
-          const link = await uploadViaProxy(pngFile)
+      const link = await uploadViaProxy(pngFile);
 
-    uploadedUrls.push(link);
+      uploadedUrls.push(link);
     } catch (err) {
-      console.error("Error during upload", err)
+      console.error("Error during upload", err);
     }
   }
 
