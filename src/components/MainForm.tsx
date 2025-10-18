@@ -73,6 +73,7 @@ export default function SlidePromptGenerator() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
+   const [skipGeneration, setSkipGeneration] = useState(false);
   // ⬇️ NEW: optional PDF file, only used if present
   const [pdfFile, setPdfFile] = useState<File | null>(null); // optional
   
@@ -82,9 +83,17 @@ export default function SlidePromptGenerator() {
   });
 
 async function generatePrompts() {
-  if (!topic.trim()) return;
+  if (!topic.trim() && !pdfFile) return;
   setLoading(true);
   setPrompts([]);
+
+        if (skipGeneration && pdfFile) {
+        const urls = await splitAndUpload(pdfFile);
+        setImageUrls(urls);
+        setPrompts([]); // skip GPT
+        setLoading(false);
+        return;
+      }
 
       const userMsg =
       `Topic: ${topic.trim()}\n` +
@@ -166,38 +175,57 @@ try {
     <div className="max-w-2xl mx-auto mt-12 p-6 border rounded-lg bg-white shadow-sm">
       <h1 className="text-2xl font-bold mb-4 text-gray-800">AI Slide Prompt Generator</h1>
 
+    
+      <div className="flex items-center justify-between mb-4">
+        <label className="text-gray-800 font-medium">
+          Upload & Animate (skip AI generation)
+        </label>
+        <input
+          type="checkbox"
+          checked={skipGeneration}
+          onChange={(e) => setSkipGeneration(e.target.checked)}
+          className="w-5 h-5 cursor-pointer"
+        />
+      </div>
+
       <div className="space-y-3">
-        <input
-          type="text"
-          value={topic}
-          onChange={(e) => setTopic(e.target.value)}
-          placeholder='e.g. "create 6 slides about global warming"'
-          className="w-full border p-3 rounded-md text-black"
-        />
+        {!skipGeneration && (
+          <>
+            <input
+              type="text"
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              placeholder='e.g. "create 6 slides about global warming"'
+              className="w-full border p-3 rounded-md text-black"
+            />
 
-        <input
-          type="text"
-          value={style}
-          onChange={(e) => setStyle(e.target.value)}
-          placeholder='Optional style, e.g. "isometric 3D corporate", or leave blank'
-          className="w-full border p-3 rounded-md text-black"
-        />
+            <input
+              type="text"
+              value={style}
+              onChange={(e) => setStyle(e.target.value)}
+              placeholder='Optional style, e.g. "isometric 3D corporate", or leave blank'
+              className="w-full border p-3 rounded-md text-black"
+            />
 
-        <div className="flex items-center gap-3">
-          <label className="text-gray-700">Slides:</label>
-          <input
-            type="number"
-            min={1}
-            max={20}
-            value={count}
-            onChange={(e) => setCount(parseInt(e.target.value || "6", 10))}
-            className="w-24 border p-2 rounded-md text-black"
-          />
-        </div>
+            <div className="flex items-center gap-3">
+              <label className="text-gray-700">Slides:</label>
+              <input
+                type="number"
+                min={1}
+                max={20}
+                value={count}
+                onChange={(e) =>
+                  setCount(parseInt(e.target.value || "6", 10))
+                }
+                className="w-24 border p-2 rounded-md text-black"
+              />
+            </div>
+          </>
+        )}
         {/* ⬇️ NEW: totally optional PDF picker, nothing else changes */}
         <input
           type="file"
-          accept="application/pdf"
+        accept=".pdf,.pptx"
           onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)}
           className="w-full border p-2 rounded-md text-black"
         />
@@ -207,15 +235,21 @@ try {
           disabled={loading}
           className="bg-black text-white px-4 py-2 rounded-md hover:bg-gray-800 disabled:opacity-60"
         >
-          {loading ? "Generating..." : "Generate Prompts"}
+          {loading
+            ? "Processing..."
+            : skipGeneration
+            ? "Upload & Animate"
+            : "Generate Prompts"}
         </button>
       </div>
 
       {error && <p className="mt-4 text-red-600">{error}</p>}
 
-      {prompts.length > 0 && (
+      {prompts.length > 0 && !skipGeneration && (
         <div className="mt-6 space-y-2">
-          <h2 className="text-lg font-semibold text-gray-700">Generated Slide Prompts</h2>
+          <h2 className="text-lg font-semibold text-gray-700">
+            Generated Slide Prompts
+          </h2>
           <ul className="list-disc list-inside text-gray-800">
             {prompts.map((p, i) => (
               <li key={i} className="whitespace-pre-wrap">

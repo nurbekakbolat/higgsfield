@@ -45,7 +45,7 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
       headers,
       body: JSON.stringify({
         params: {
-          prompt: "generate smooth transition",
+prompt: "generate smooth transition between two slides, keep all text and typography fixed and legible, do NOT morph or distort text",
           duration: 6,
           resolution: "768",
           input_image: { type: "image_url", image_url: pair.start },
