@@ -2,6 +2,13 @@
 
 import { useState } from "react";
 import OpenAI from "openai";
+import { zodResponseFormat } from "openai/helpers/zod";
+import { z } from "zod";
+
+// Zod schema for structured output
+const SlidePromptsSchema = z.object({
+  prompts: z.array(z.string()),
+});
 
 const GPT_PROMPT_ENHANCE = `
 You are a senior prompt engineer for presentation decks.
@@ -41,36 +48,20 @@ async function generatePrompts() {
   setPrompts([]);
 
   try {
-    // STEP 1: Enhance the user's vague request
-    const enhance = await openai.chat.completions.create({
+    // Use structured output with Zod schema
+    const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: GPT_PROMPT_ENHANCE },
         { role: "user", content: topic },
       ],
+      response_format: zodResponseFormat(SlidePromptsSchema, "slide_prompts"),
     });
 
-    const enhanced = enhance.choices[0].message?.content || "";
-
-    // STEP 2: Generate final per-slide image prompts using the enhanced context
-    const chat = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a slide-image prompt generator. Based on the enhanced description below, return ONLY a numbered list of short, vivid, presentation-friendly image prompts — one per slide. No titles or explanations.",
-        },
-        { role: "user", content: enhanced },
-      ],
-    });
-
-    const text = chat.choices[0].message?.content || "";
-    const slides = text
-      .split(/\n+/)
-      .map((line) => line.replace(/^\d+\.?\s*/, "").trim())
-      .filter(Boolean);
-
+    // Parse the structured response
+    const result = JSON.parse(completion.choices[0].message?.content || "{}");
+    const slides = result.prompts || [];
+    console.log("Generated slides:", slides);
     setPrompts(slides);
   } catch (err) {
     console.error("Error generating prompts:", err);
