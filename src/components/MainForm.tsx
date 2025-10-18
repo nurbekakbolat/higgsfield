@@ -17,43 +17,63 @@ const DEFAULT_STYLE =
   "clean corporate flat infographic dashboard style, soft neutral/pastel palette (sand, sage, slate), modern sans-serif typography, subtle gradients, high whitespace";
 
 const GPT_PROMPT_ENHANCE = `
-You are producing COMPLETE Seedream 4.0 image prompts for slides. The image model has ZERO MEMORY.
+You are a visual storyteller and presentation director. Your task is to generate a JSON object containing short descriptions of slides for AI image generation using Seedream 4.0.
 
-OUTPUT: return ONLY a valid JSON array of strings; each string is one full prompt. No prose, no keys.
+The user provides:
 
-ABSOLUTE RULES FOR EVERY SLIDE
-1) Start with: "PowerPoint slide background in <STYLE>, 16:9 landscape".
-   - If the user didn't specify, use: "${DEFAULT_STYLE}".
-   - Repeat the SAME style in every slide.
+Topic of the presentation
 
-2) Include ALL TEXT to render (titles, axis labelsnpm i pdfjs-dist, legend keys, captions) and ALL DATA.
-   - Use concise English unless user specifies another language.
-   - Use numerals (never spell out numbers); one decimal max where relevant.
-   - If a range of years is referenced, provide a contiguous year:value list for EVERY year.
-   - No placeholders like "...", "etc", "N/A". No invented “model knowledge” beyond the dataset you output.
+Number of slides
 
-3) Spatial contract: explicitly place everything with anchors and sizes/ratios.
-   - Examples: "TITLE top-left:", "legend bottom-right:", "left panel 60% width:", "right panel 40% width:", "empty right gutter for bullets".
-   - For charts: chart type, axes labels, tick labels, legend position, color mapping, and explicit DATA values.
-   - For maps: projection = "simplified flat world"; define which regions get which color bins; include a legend and its position.
+(Optional) Description — a combined text that may include both the content of the presentation and visual preferences (style, mood, atmosphere, colors, composition, etc.)
 
-4) Consistency & tone: professional presentation; avoid animals/people unless requested.
+Generation Rules:
 
-5) End every slide with: "Draw all listed text EXACTLY as written."
+Each slide must be self-contained (stateless), but all slides together should form a coherent narrative that logically develops the topic.
 
-6) Respect requested slide count (default 6).
+Use as much of the user’s description as possible — especially the semantic (content) part.
 
-FORMAT INSIDE EACH PROMPT (use these section tags verbatim):
-STYLE:
-TITLE:
-LAYOUT:
-CHART/MAP/GRID:
-DATA:
-AXES:
-LEGEND:
-COLORS:
-CAPTION:
-CONSTRAINTS: Draw all listed text EXACTLY as written.
+If the user includes visual preferences (for example, style, lighting, emotions, or colors), apply them consistently across all slides.
+
+Each slide should be written as a single concise line, focusing on visual elements that Seedream can interpret.
+
+Include clear visual parameters when possible: lighting (e.g., "warm soft lighting", "cinematic sunset light"), style (e.g., "photorealistic", "3D render", "oil painting"), mood (e.g., "hopeful atmosphere", "dramatic tone"), composition (e.g., "wide shot", "close-up", "aerial view").
+
+Do not use references between slides (such as "next", "previous", or "later").
+
+The output must be a valid JSON object with the key "slides".
+
+Output Format:
+{
+"slides": [
+"Description of the first slide (self-contained visual scene related to the topic).",
+"Description of the second slide (new scene that continues the story but stands on its own).",
+"Description of the third slide (independent yet logically connected)."
+]
+}
+
+User Input Format:
+Topic: <topic of the presentation>
+Number of slides: <number>
+Description (optional): <combined text including both presentation content and visual preferences>
+
+Priorities:
+
+Use the user’s description as literally as possible, keeping their original wording whenever feasible.
+
+Apply visual preferences uniformly across all scenes.
+
+Each slide must be visually complete and independently understandable.
+
+Output only the JSON — no explanations, no comments.
+
+Recommendations for Seedream 4.0:
+
+Use vivid visual keywords such as "cinematic", "highly detailed", "8K photorealistic", "depth of field", "soft focus", "dynamic composition".
+
+If the user doesn’t specify a style, default to "cinematic photorealism with soft natural light and depth of field".
+
+Seedream 4.0 performs best with concrete objects, actions, and lighting — avoid abstract descriptions.
 `;
 
 function getOutputText(res: any): string {
@@ -88,8 +108,8 @@ async function generatePrompts() {
 
       const userMsg =
       `Topic: ${topic.trim()}\n` +
-      (style.trim() ? `Style: ${style.trim()}\n` : "Style: (default)\n") +
-      `Slide count: ${count}`;
+      (style.trim() ? `Style: ${style.trim()}\n` : "Description: (default)\n") +
+      `Number of slides: ${count}`;
 
 try {
   let slides: string[] = [];
@@ -138,12 +158,13 @@ try {
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: GPT_PROMPT_ENHANCE },
-        { role: "user", content: topic },
+        { role: "user", content: userMsg },
       ],
       response_format: zodResponseFormat(SlidePromptsSchema, "slide_prompts"),
     });
 
     const result = JSON.parse(completion.choices[0].message?.content || "{}");
+    console.log("Zod parsed result:", result);
     slides = result.prompts || [];
     setPrompts(slides);
   }
