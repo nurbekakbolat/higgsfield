@@ -19,7 +19,7 @@ ABSOLUTE RULES FOR EVERY SLIDE
    - If the user didn't specify, use: "${DEFAULT_STYLE}".
    - Repeat the SAME style in every slide.
 
-2) Include ALL TEXT to render (titles, axis labels, legend keys, captions) and ALL DATA.
+2) Include ALL TEXT to render (titles, axis labelsnpm i pdfjs-dist, legend keys, captions) and ALL DATA.
    - Use concise English unless user specifies another language.
    - Use numerals (never spell out numbers); one decimal max where relevant.
    - If a range of years is referenced, provide a contiguous year:value list for EVERY year.
@@ -49,20 +49,30 @@ CAPTION:
 CONSTRAINTS: Draw all listed text EXACTLY as written.
 `;
 
-
 export default function SlidePromptGenerator() {
   const [topic, setTopic] = useState("");
-  const [style, setStyle] = useState(""); // optional user style override
+  const [style, setStyle] = useState("");
   const [count, setCount] = useState(6);
   const [prompts, setPrompts] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [imageUrls, setImageUrls] = useState<string[]>([])
-
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  // ⬇️ NEW: optional PDF file, only used if present
+  const [pdfFile, setPdfFile] = useState<File | null>(null); // optional
+  
   const openai = new OpenAI({
     apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY!,
     dangerouslyAllowBrowser: true,
   });
+
+  function getOutputText(res: any): string {
+    // modern SDK exposes .output_text; fallback to digging if needed
+    return (res as any).output_text
+      ?? (res?.output?.map((o: any) =>
+           o?.content?.map((c: any) => c?.text?.value).filter(Boolean).join("\n")
+         ).join("\n"))
+      ?? "";
+  }
 
   async function generatePrompts() {
     if (!topic.trim()) return;
@@ -76,30 +86,57 @@ export default function SlidePromptGenerator() {
       `Slide count: ${count}`;
 
     try {
-      const res = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        temperature: 0.3,
-        messages: [
-          { role: "system", content: GPT_PROMPT_ENHANCE },
-          { role: "user", content: userMsg }
-        ],
-      });
+      let raw = "[]";
 
-      const raw = res.choices[0].message?.content?.trim() || "[]";
+      if (pdfFile) {
+        // -------- NEW: upload PDF and call Responses API with input_file --------
+        const uploaded = await openai.files.create({
+          file: pdfFile,
+          purpose: "assistants", // required for file_search and multimodal
+        });
 
-      // Some models wrap JSON in code fences; strip if needed.
+        const res = await openai.responses.create({
+          model: "gpt-4.1-mini",
+          temperature: 0.3,
+          input: [
+            {
+              role: "system",
+              content: [{ type: "input_text", text: GPT_PROMPT_ENHANCE }],
+            },
+            {
+              role: "user",
+              content: [
+                { type: "input_text", text: userMsg },
+                { type: "input_file", file_id: uploaded.id }, // ← the PDF itself
+              ],
+            },
+          ],
+        });
+
+        raw = getOutputText(res)?.trim() || "[]";
+      } else {
+        // -------- fallback: your existing Chat Completions flow --------
+        const res = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          temperature: 0.3,
+          messages: [
+            { role: "system", content: GPT_PROMPT_ENHANCE },
+            { role: "user", content: userMsg },
+          ],
+        });
+        raw = res.choices[0].message?.content?.trim() || "[]";
+      }
+
+      // strip ```json fences if present
       const jsonText = raw.replace(/^```json\s*/i, "").replace(/```$/i, "");
-
       const arr = JSON.parse(jsonText);
       if (!Array.isArray(arr)) throw new Error("Expected a JSON array.");
 
-      const jobList = await generateImages(arr)
+      const jobList = await generateImages(arr);
+      const urls = await pollManyJobsUntilComplete(jobList);
 
-      const urls = await pollManyJobsUntilComplete(jobList)
-
-      console.log("urls", urls)
-      setImageUrls(urls)
-      setPrompts(arr as string[]);
+      setImageUrls(urls);
+      setPrompts(arr);
     } catch (e: any) {
       console.error(e);
       setError(e?.message ?? "Failed to generate prompts.");
@@ -141,6 +178,14 @@ export default function SlidePromptGenerator() {
           />
         </div>
 
+        {/* ⬇️ NEW: totally optional PDF picker, nothing else changes */}
+        <input
+          type="file"
+          accept="application/pdf"
+          onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)}
+          className="w-full border p-2 rounded-md text-black"
+        />
+
         <button
           onClick={generatePrompts}
           disabled={loading}
@@ -164,7 +209,8 @@ export default function SlidePromptGenerator() {
           </ul>
         </div>
       )}
-      <Transition imageUrls={imageUrls}/>
+
+      <Transition imageUrls={imageUrls} />
     </div>
   );
 }
