@@ -10,7 +10,7 @@ interface Pair {
 }
 
 interface JobItem {
-  id: string;            // job-set id
+  id: string;            // job-set id (after submit)
   pair: Pair;            // which images this job is for
   status: JobStatus;
   url?: string;          // final video url
@@ -19,13 +19,10 @@ interface JobItem {
 
 const HIGGSFIELD_BASE = "https://platform.higgsfield.ai/v1";
 
-export default function Transition({
-  imageUrls
-}: {
-  imageUrls: string[]
-}) {
+export default function Transition({ imageUrls }: { imageUrls: string[] }) {
   const [jobs, setJobs] = useState<JobItem[]>([]);
   const [running, setRunning] = useState(false);
+
   const headers = {
     "Content-Type": "application/json",
     "hf-api-key": process.env.NEXT_PUBLIC_HF_API_KEY!,
@@ -38,6 +35,7 @@ export default function Transition({
     return out;
   };
 
+  // POST one pair, return job-set id and initial status
   const submitPair = async (pair: Pair) => {
     const res = await fetch(`${HIGGSFIELD_BASE}/image2video/minimax`, {
       method: "POST",
@@ -53,15 +51,11 @@ export default function Transition({
         },
       }),
     });
-
     if (!res.ok) throw new Error(`submitPair HTTP ${res.status}`);
     const data = await res.json();
-
     const jobSetId: string | undefined = data?.id;
     const initialStatus: JobStatus | undefined = data?.jobs?.[0]?.status;
-
     if (!jobSetId) throw new Error("No job-set id in response");
-
     return { jobSetId, initialStatus: initialStatus ?? "queued" };
   };
 
@@ -96,72 +90,80 @@ export default function Transition({
     throw new Error("Polling timed out (20 min)");
   };
 
-  const runAll = async () => {
+  // Helper to update a specific job by index without racing state
+  const updateJobAt = (idx: number, patch: Partial<JobItem>) => {
+    setJobs(prev => {
+      const copy = [...prev];
+      copy[idx] = { ...copy[idx], ...patch };
+      return copy;
+    });
+  };
+
+  // PARALLEL run: submit all pairs, then poll all in parallel
+  const runAllParallel = async () => {
     if (running || !imageUrls.length) return;
     setRunning(true);
-    setJobs([]);
 
     const pairs = buildPairs(imageUrls);
 
-    for (const pair of pairs) {
-      // placeholder row
-      setJobs(prev => [...prev, { id: "pending", pair, status: "queued" }]);
+    // initialize placeholders so UI renders all cards immediately
+    setJobs(pairs.map(p => ({ id: "pending", pair: p, status: "queued" })));
 
+    // 1) submit all pairs in parallel
+    const submitPromises = pairs.map(async (pair, idx) => {
       try {
         const { jobSetId, initialStatus } = await submitPair(pair);
-
-        // replace placeholder with real id
-        setJobs(prev => {
-          const copy = [...prev];
-          copy[copy.length - 1] = { id: jobSetId, pair, status: initialStatus };
-          return copy;
-        });
-
-        if (initialStatus === "completed") {
-          setJobs(prev =>
-            prev.map(j => (j.id === jobSetId ? { ...j, status: "completed" } : j))
-          );
-          continue;
-        }
-        if (initialStatus === "failed" || initialStatus === "error") {
-          setJobs(prev =>
-            prev.map(j => (j.id === jobSetId ? { ...j, status: initialStatus, error: "Failed at submit" } : j))
-          );
-          continue;
-        }
-
-        const { status, url } = await pollUntilDone(jobSetId, 3000, 1_200_000);
-
-        setJobs(prev =>
-          prev.map(j =>
-            j.id === jobSetId
-              ? { ...j, status, url, error: status === "completed" ? undefined : "Generation failed" }
-              : j
-          )
-        );
+        updateJobAt(idx, { id: jobSetId, status: initialStatus });
+        return { idx, jobSetId, status: initialStatus as JobStatus, ok: true as const };
       } catch (e: any) {
-        setJobs(prev => {
-          const copy = [...prev];
-          const idx = copy.length - 1;
-          copy[idx] = { ...copy[idx], status: "failed", error: e?.message ?? "Unknown error" };
-          return copy;
-        });
+        updateJobAt(idx, { status: "failed", error: e?.message ?? "Submit failed" });
+        return { idx, ok: false as const };
       }
-    }
+    });
+
+    const submitted = await Promise.all(submitPromises);
+
+    // 2) poll all successfully submitted jobs in parallel
+    const pollPromises = submitted
+      .filter((s): s is { idx: number; jobSetId: string; status: JobStatus; ok: true } => s.ok === true)
+      .map(async s => {
+        // if already completed instantly, skip polling
+        if (s.status === "completed") {
+          // we don't have url in immediate response, still poll once to fetch the url
+          try {
+            const { url } = await pollUntilDone(s.jobSetId, 500, 5000); // short poll to fetch url
+            updateJobAt(s.idx, { status: "completed", url });
+          } catch {
+            // whatever, mark completed without url
+            updateJobAt(s.idx, { status: "completed" });
+          }
+          return;
+        }
+
+        try {
+          const { status, url } = await pollUntilDone(s.jobSetId, 3000, 1_200_000);
+          updateJobAt(s.idx, { status, url, error: status === "completed" ? undefined : "Generation failed" });
+        } catch (e: any) {
+          updateJobAt(s.idx, { status: "failed", error: e?.message ?? "Polling failed" });
+        }
+      });
+
+    await Promise.allSettled(pollPromises);
 
     setRunning(false);
   };
 
   useEffect(() => {
     if (!imageUrls.length) return;
-
-    runAll()
-  }, [imageUrls])
+    runAllParallel();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imageUrls.join("|")]); // re-run if list changes content
 
   return (
     <div className="flex flex-col gap-6">
-      {/* <button
-        onClick={runAll}
+      {/* If you want manual trigger instead of auto-run, uncomment:
+      <button
+        onClick={runAllParallel}
         disabled={running}
         className="px-4 py-2 rounded bg-black text-white disabled:opacity-50"
       >
@@ -184,6 +186,9 @@ export default function Transition({
               <div className="text-sm">
                 Status: <b>{job.status}</b>
                 {job.error ? <div className="text-red-600 mt-1">{job.error}</div> : null}
+                {running && !job.error && job.status !== "completed" ? (
+                  <div className="text-xs text-gray-500">Waiting on GPUs like everyone else.</div>
+                ) : null}
               </div>
             )}
           </div>
