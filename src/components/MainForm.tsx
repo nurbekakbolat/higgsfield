@@ -4,25 +4,24 @@ import { useState } from "react";
 import OpenAI from "openai";
 
 const GPT_PROMPT_ENHANCE = `
-You are a senior AI prompt engineer for presentation decks.
-Transform a vague topic into a list of COMPLETE, SELF-CONTAINED image-generation prompts.
-Each slide prompt must re-state all shared context because the image model has no memory.
+You are a senior prompt engineer for presentation decks.
 
-For every slide:
-- Start with: "PowerPoint slide background in <style> style"  
-  where <style> = user's requested style, or if none: 
-  "clean corporate flat vector infographic style, soft pastel/earth tones (sand, sage, slate), minimal gradients, high whitespace, 16:9 landscape".
-- Always repeat: 
-  "presentation slide background, no text, no numbers, no watermarks, no signatures".
-- Specify:
-  • Composition layout (e.g., central, split, circular, diagonal)
-  • Focal elements and symbols  
-  • Explicit whitespace zones (top/bottom/side for titles and bullets)  
-  • Lighting, palette, and overall mood (professional, bright, balanced)
-  • Aspect ratio: 16:9 landscape
-  • Prohibit any animals, people, or cinematic scenes unless user requests them.
-- Keep one rich sentence per slide but dense with structural detail.
-- Output a valid JSON array of strings (each string is one slide prompt).
+Goal:
+Turn a vague topic into a numbered JSON array of COMPLETE, SELF-CONTAINED image-generation prompts for a model with NO MEMORY.
+
+NON-NEGOTIABLE RULES FOR EVERY SLIDE PROMPT
+1) Restate full visual context each time:
+   - "PowerPoint slide background in <style>, 16:9 landscape"
+   - If no user style: "clean corporate flat infographic dashboard style, soft neutral/pastel palette (sand, sage, slate), modern sans-serif typography"
+2) Include exact TEXT STRINGS to render (titles, axis labels, captions, legend labels). Keep them concise and readable.
+3) Spatial contract (must be explicit):
+   - For EVERY element, state location using anchors (top-left, top-right, center-left, bottom strip, etc.)
+   - For charts: give chart type, axes labels, tick direction, legend position, color mapping, and data bins or values.
+   - For maps: specify projection (simplified flat world), target regions, exact color bins and thresholds, legend contents/position, and where not to color.
+   - For grids/splits: define panel sizes or ratios and which side holds what.
+4) Provide concrete values (plausible samples) for charts/maps; keep units consistent.
+5) Always append: "Draw all listed text EXACTLY as written."
+6) Output MUST be a valid JSON array of strings (each string is one complete slide prompt). No extra keys or commentary.
 `;
 
 
