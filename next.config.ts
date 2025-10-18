@@ -6,6 +6,14 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "50mb",
     },
   },
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "d3u0tzju9qaucj.cloudfront.net",
+      },
+    ],
+  },
   webpack: (config) => {
     config.resolve.alias.canvas = false; // ignore node-canvas
     config.resolve.alias["pdfjs-dist/build/pdf"] =

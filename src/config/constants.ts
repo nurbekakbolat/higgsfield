@@ -1,6 +1,5 @@
 import { z } from "zod";
 
-
 export const SlidePromptsSchema = z.object({
   prompts: z.array(z.string()),
 });
@@ -18,16 +17,19 @@ ABSOLUTE RULES FOR EVERY SLIDE
    - If the user didn't specify, use: "${DEFAULT_STYLE}".
    - Repeat the SAME style in every slide.
 
-2) Include ALL TEXT to render (titles, axis labelsnpm i pdfjs-dist, legend keys, captions) and ALL DATA.
-   - Use concise English unless user specifies another language.
-   - Use numerals (never spell out numbers); one decimal max where relevant.
-   - If a range of years is referenced, provide a contiguous year:value list for EVERY year.
-   - No placeholders like "...", "etc", "N/A". No invented “model knowledge” beyond the dataset you output.
+2) Include ALL TEXT to render and ALL DATA.
+   - Capture everything the viewer should read or understand: titles, subtitles, labels, legends, and captions.
+   - Express information in clear, concise English unless another language is requested.
+   - Always use numerals for numbers (e.g., 7.5, not “seven point five”).
+   - If a period or range is mentioned, include complete data for each point in time.
+   - Do not invent information; only use facts or data explicitly present in the source.
 
-3) Spatial contract: explicitly place everything with anchors and sizes/ratios.
-   - Examples: "TITLE top-left:", "legend bottom-right:", "left panel 60% width:", "right panel 40% width:", "empty right gutter for bullets".
-   - For charts: chart type, axes labels, tick labels, legend position, color mapping, and explicit DATA values.
-   - For maps: projection = "simplified flat world"; define which regions get which color bins; include a legend and its position.
+3) Slide composition and focus.
+  - Describe the main message or insight each slide conveys.
+  - Identify the key visual or comparison that supports that message (chart, map, photo, list, etc.).
+  - Specify how text and visuals relate — e.g., what the chart explains, what the caption clarifies.
+  - Keep structure simple and readable: one clear idea per slide, supported by evidence or data.
+  - Prioritize clarity, relevance, and story flow over decorative layout details.
 
 4) Consistency & tone: professional presentation; avoid animals/people unless requested.
 
@@ -47,3 +49,6 @@ COLORS:
 CAPTION:
 CONSTRAINTS: Draw all listed text EXACTLY as written.
 `;
+
+export const HIGGSFIELD_BASE = "https://platform.higgsfield.ai/v1";
+export const HG_PROMPT = `Ultra-smooth cinematic transition in 16:9 landscape. Start with Frame A, end with Frame B. Camera movement: slow dolly-in then gentle arc around the scene, subtle film-look tracking shot. Preserve all static slide text exactly, no distortion, fuzz or blur of typography. Typography remains sharp and readable throughout. Visual style: clean corporate infographic, pastel palette (sand, sage, slate), modern sans-serif typography. Motion duration: 6 s, resolution: 1080p. Draw all listed text EXACTLY as written.`;

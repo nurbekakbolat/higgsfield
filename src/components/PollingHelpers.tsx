@@ -1,4 +1,10 @@
-export type JobStatus = "queued" | "processing" | "completed" | "failed" | "canceled" | string;
+export type JobStatus =
+  | "queued"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "canceled"
+  | string;
 
 export interface HiggsfieldJob {
   id: string;
@@ -38,18 +44,25 @@ const sleep = (ms: number, signal?: AbortSignal) =>
     }
   });
 
-async function fetchJobSet(jobSetId: string): Promise<HiggsfieldJobSetResponse> {
-  const res = await fetch(`https://platform.higgsfield.ai/v1/job-sets/${jobSetId}`, {
-    method: "GET",
-    headers: {
-      "hf-api-key": process.env.NEXT_PUBLIC_HF_API_KEY as string,
-      "hf-secret": process.env.NEXT_PUBLIC_HF_API_SECRET as string,
-    },
-    cache: "no-store",
-  });
+async function fetchJobSet(
+  jobSetId: string
+): Promise<HiggsfieldJobSetResponse> {
+  const res = await fetch(
+    `https://platform.higgsfield.ai/v1/job-sets/${jobSetId}`,
+    {
+      method: "GET",
+      headers: {
+        "hf-api-key": process.env.NEXT_PUBLIC_HF_API_KEY as string,
+        "hf-secret": process.env.NEXT_PUBLIC_HF_API_SECRET as string,
+      },
+      cache: "no-store",
+    }
+  );
 
   if (!res.ok) {
-    throw new Error(`Status check failed (${res.status}) for job_set_id=${jobSetId}`);
+    throw new Error(
+      `Status check failed (${res.status}) for job_set_id=${jobSetId}`
+    );
   }
   return res.json();
 }
@@ -58,11 +71,7 @@ export async function pollJobUntilComplete(
   jobSetId: string,
   opts: PollOptions = {}
 ): Promise<string | null> {
-  const {
-    intervalMs = 1500,
-    timeoutMs = 120_000,
-    signal,
-  } = opts;
+  const { intervalMs = 1500, timeoutMs = 120_000, signal } = opts;
 
   const start = Date.now();
   let delay = intervalMs;
@@ -83,6 +92,7 @@ export async function pollJobUntilComplete(
         }
       }
     } catch (err) {
+      console.error(err);
       delay = Math.min(delay * 1.5, 6000);
     }
 

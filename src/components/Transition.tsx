@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { HG_PROMPT, HIGGSFIELD_BASE } from "~/config";
 import { concatVideosBrowser } from "~/helpers/concatVideos";
 
 type JobStatus = "queued" | "processing" | "completed" | "failed" | "error";
@@ -11,14 +12,12 @@ interface Pair {
 }
 
 interface JobItem {
-  id: string;            // job-set id (after submit)
-  pair: Pair;            // which images this job is for
+  id: string; // job-set id (after submit)
+  pair: Pair; // which images this job is for
   status: JobStatus;
-  url?: string;          // final video url
+  url?: string; // final video url
   error?: string;
 }
-
-const HIGGSFIELD_BASE = "https://platform.higgsfield.ai/v1";
 
 export default function Transition({ imageUrls }: { imageUrls: string[] }) {
   const [jobs, setJobs] = useState<JobItem[]>([]);
@@ -34,7 +33,8 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
 
   const buildPairs = (urls: string[]): Pair[] => {
     const out: Pair[] = [];
-    for (let i = 0; i < urls.length - 1; i++) out.push({ start: urls[i], end: urls[i + 1] });
+    for (let i = 0; i < urls.length - 1; i++)
+      out.push({ start: urls[i], end: urls[i + 1] });
     return out;
   };
 
@@ -45,7 +45,7 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
       headers,
       body: JSON.stringify({
         params: {
-          prompt: "generate smooth transition between two slides, keep all text and typography fixed and legible, do NOT morph or distort text",
+          prompt: HG_PROMPT,
           duration: 6,
           resolution: "1080",
           input_image: { type: "image_url", image_url: pair.start },
@@ -63,11 +63,17 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
   };
 
   // Poll up to 20 minutes (1_200_000 ms), every 3 seconds
-  const pollUntilDone = async (jobSetId: string, stepMs = 3000, maxMs = 1_200_000) => {
+  const pollUntilDone = async (
+    jobSetId: string,
+    stepMs = 3000,
+    maxMs = 1_200_000
+  ) => {
     const started = Date.now();
 
     const fetchStatus = async () => {
-      const res = await fetch(`${HIGGSFIELD_BASE}/job-sets/${jobSetId}`, { headers });
+      const res = await fetch(`${HIGGSFIELD_BASE}/job-sets/${jobSetId}`, {
+        headers,
+      });
       if (!res.ok) throw new Error(`poll HTTP ${res.status}`);
       const data = await res.json();
       const job = data?.jobs?.[0];
@@ -79,23 +85,25 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
     // initial check
     let { status, url } = await fetchStatus();
     if (status === "completed") return { status, url };
-    if (status === "failed" || status === "error") return { status, url: undefined };
+    if (status === "failed" || status === "error")
+      return { status, url: undefined };
 
     while (Date.now() - started < maxMs) {
-      await new Promise(r => setTimeout(r, stepMs));
+      await new Promise((r) => setTimeout(r, stepMs));
       const res = await fetchStatus();
       status = res.status;
       url = res.url;
 
       if (status === "completed") return { status, url };
-      if (status === "failed" || status === "error") return { status, url: undefined };
+      if (status === "failed" || status === "error")
+        return { status, url: undefined };
     }
     throw new Error("Polling timed out (20 min)");
   };
 
   // Helper to update a specific job by index without racing state
   const updateJobAt = (idx: number, patch: Partial<JobItem>) => {
-    setJobs(prev => {
+    setJobs((prev) => {
       const copy = [...prev];
       copy[idx] = { ...copy[idx], ...patch };
       return copy;
@@ -106,21 +114,26 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
   const runAllParallel = async () => {
     if (running || !imageUrls.length) return;
     setRunning(true);
-  setMergedUrl(null);
+    setMergedUrl(null);
 
     const pairs = buildPairs(imageUrls);
 
     // initialize placeholders so UI renders all cards immediately
-    setJobs(pairs.map(p => ({ id: "pending", pair: p, status: "queued" })));
+    setJobs(pairs.map((p) => ({ id: "pending", pair: p, status: "queued" })));
 
     // 1) submit all pairs in parallel
     const submitPromises = pairs.map(async (pair, idx) => {
       try {
         const { jobSetId, initialStatus } = await submitPair(pair);
         updateJobAt(idx, { id: jobSetId, status: initialStatus });
-        return { idx, jobSetId, status: initialStatus as JobStatus, ok: true as const };
+        return {
+          idx,
+          jobSetId,
+          status: initialStatus as JobStatus,
+          ok: true as const,
+        };
       } catch (e) {
-        console.error(e)
+        console.error(e);
 
         updateJobAt(idx, { status: "failed", error: "Submit failed" });
         return { idx, ok: false as const };
@@ -131,8 +144,17 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
 
     // 2) poll all successfully submitted jobs in parallel
     const pollPromises = submitted
-      .filter((s): s is { idx: number; jobSetId: string; status: JobStatus; ok: true } => s.ok === true)
-      .map(async s => {
+      .filter(
+        (
+          s
+        ): s is {
+          idx: number;
+          jobSetId: string;
+          status: JobStatus;
+          ok: true;
+        } => s.ok === true
+      )
+      .map(async (s) => {
         // if already completed instantly, skip polling
         if (s.status === "completed") {
           // we don't have url in immediate response, still poll once to fetch the url
@@ -147,10 +169,18 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
         }
 
         try {
-          const { status, url } = await pollUntilDone(s.jobSetId, 3000, 1_200_000);
-          updateJobAt(s.idx, { status, url, error: status === "completed" ? undefined : "Generation failed" });
+          const { status, url } = await pollUntilDone(
+            s.jobSetId,
+            3000,
+            1_200_000
+          );
+          updateJobAt(s.idx, {
+            status,
+            url,
+            error: status === "completed" ? undefined : "Generation failed",
+          });
         } catch (e) {
-          console.error(e)
+          console.error(e);
           updateJobAt(s.idx, { status: "failed", error: "Polling failed" });
         }
       });
@@ -166,9 +196,10 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageUrls.join("|")]); // re-run if list changes content
 
-   useEffect(() => {
-    const allDone = jobs.length > 0 && jobs.every((j) => j.status === "completed" && j.url);
-  if (!allDone || mergedUrl) return; 
+  useEffect(() => {
+    const allDone =
+      jobs.length > 0 && jobs.every((j) => j.status === "completed" && j.url);
+    if (!allDone || mergedUrl) return;
 
     const urls = jobs.map((j) => j.url!) as string[];
     (async () => {
@@ -186,45 +217,66 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* If you want manual trigger instead of auto-run, uncomment:
       <button
         onClick={runAllParallel}
         disabled={running}
-        className="px-4 py-2 rounded bg-black text-white disabled:opacity-50"
+        className="self-start rounded-md bg-gray-200 px-4 py-2 text-sm font-medium text-gray-700
+             hover:bg-gray-300 active:bg-gray-400 disabled:bg-gray-100 disabled:text-gray-400
+             transition-colors duration-150"
       >
-        {running ? "Working..." : "Generate Transitions"}
-      </button> */}
-
+        {running ? "Generating..." : "Regenerate transitions"}
+      </button>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {jobs.map((job, idx) => (
           <div key={`${job.id}-${idx}`} className="flex flex-col gap-2">
             <div className="text-sm text-gray-600">
               {`Pair ${idx + 1}: `}
-              <span className="break-all">{job.pair.start}</span>
+              <a href={job.pair.start} className="break-all">
+                Start frame
+              </a>
               {" → "}
-              <span className="break-all">{job.pair.end}</span>
+              <a href={job.pair.end} className="break-all">
+                End frame
+              </a>
             </div>
-
             {job.url ? (
-              <video src={job.url} controls autoPlay loop className="w-full rounded" />
+              <video
+                src={job.url}
+                controls
+                autoPlay
+                loop
+                className="w-full rounded"
+              />
             ) : (
               <div className="text-sm">
                 Status: <b>{job.status}</b>
-                {job.error ? <div className="text-red-600 mt-1">{job.error}</div> : null}
+                {job.error ? (
+                  <div className="text-red-600 mt-1">{job.error}</div>
+                ) : null}
                 {running && !job.error && job.status !== "completed" ? (
-                  <div className="text-xs text-gray-500">Waiting on GPUs like everyone else.</div>
+                  <div className="text-xs text-gray-500">
+                    Waiting on GPUs like everyone else.
+                  </div>
                 ) : null}
               </div>
             )}
           </div>
         ))}
       </div>
-            {/* Merged video */}
+      {/* Merged video */}
       {merging && <p className="text-gray-500">Merging all transitions...</p>}
       {mergedUrl && (
         <div className="mt-6">
-          <h2 className="text-lg font-semibold text-gray-700 mb-2">Merged Video</h2>
-          <video src={mergedUrl} controls autoPlay loop className="w-full rounded" />
+          <h2 className="text-lg font-semibold text-gray-700 mb-2">
+            Merged Video
+          </h2>
+          <video
+            src={mergedUrl}
+            controls
+            autoPlay
+            loop
+            className="w-full rounded"
+          />
         </div>
       )}
     </div>

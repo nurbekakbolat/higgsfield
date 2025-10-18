@@ -10,27 +10,40 @@ import { splitAndUpload } from "~/helpers/splitAndUpload";
 import type { ChatCompletion } from "openai/resources";
 import { GPT_PROMPT_ENHANCE, SlidePromptsSchema } from "~/config";
 import { GenerationParamsInput } from "./GenerationParamsInput";
+import { ImageEditModal } from "./ImageEditModal";
+import Image from "next/image";
+
+const openai = new OpenAI({
+  apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY!,
+  dangerouslyAllowBrowser: true,
+});
 
 export default function SlidePromptGenerator() {
   const [topic, setTopic] = useState("");
   const [style, setStyle] = useState("");
   const [count, setCount] = useState(6);
   const [prompts, setPrompts] = useState<string[]>([]);
+  const [genState, setGenState] = useState<
+    "promptGen" | "imagesGen" | "resultGen" | "resultReady" | "idle"
+  >("idle");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [skipGeneration, setSkipGeneration] = useState(false);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
 
-  const openai = new OpenAI({
-    apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY!,
-    dangerouslyAllowBrowser: true,
-  });
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editPrompt, setEditPrompt] = useState("");
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [regenLoadingMap, setRegenLoadingMap] = useState<
+    Record<number, boolean>
+  >({});
 
   async function generatePrompts() {
     if (!topic.trim() && !pdfFile) return;
     setLoading(true);
     setPrompts([]);
+    setGenState("promptGen");
 
     if (skipGeneration && pdfFile) {
       const urls = await splitAndUpload(pdfFile);
@@ -87,15 +100,12 @@ export default function SlidePromptGenerator() {
                 .join("\n")
             : "");
 
-        let slides: string[] = [];
         try {
           slides = JSON.parse(text);
         } catch {
           const maybeArr = text.match(/\[(.|\n)*\]/);
           slides = maybeArr ? JSON.parse(maybeArr[0]) : [];
         }
-
-        setPrompts(slides);
       } else {
         // Text-only Zod flow
         const completion: ChatCompletion = await openai.chat.completions.create(
@@ -103,7 +113,7 @@ export default function SlidePromptGenerator() {
             model: "gpt-4o-mini",
             messages: [
               { role: "system", content: GPT_PROMPT_ENHANCE },
-              { role: "user", content: topic },
+              { role: "user", content: userMsg },
             ],
             response_format: zodResponseFormat(
               SlidePromptsSchema,
@@ -120,15 +130,78 @@ export default function SlidePromptGenerator() {
       }
 
       if (slides.length > 0) {
+        setGenState("imagesGen");
         const jobList = await generateImages(slides);
         const urls = await pollManyJobsUntilComplete(jobList);
         setImageUrls(urls);
+        setGenState("resultReady");
       }
     } catch (err) {
       console.error(err);
       setError("Prompt generation failed.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleRegenerate() {
+    if (!editPrompt.trim() || editingIndex === null) return;
+
+    setRegenLoadingMap((prev) => ({ ...prev, [editingIndex]: true }));
+
+    try {
+      const res = await fetch(
+        "https://platform.higgsfield.ai/v1/text2image/seedream",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "hf-api-key": process.env.NEXT_PUBLIC_HF_API_KEY as string,
+            "hf-secret": process.env.NEXT_PUBLIC_HF_API_SECRET as string,
+          },
+          body: JSON.stringify({
+            params: {
+              prompt: editPrompt,
+              quality: "basic",
+              aspect_ratio: "16:9",
+              input_images: [],
+            },
+          }),
+        }
+      );
+      if (!res.ok) throw new Error(`Regeneration failed: ${res.status}`);
+      const data = await res.json();
+
+      const jobId = data.id;
+      const poll = async () => {
+        const r = await fetch(
+          `https://platform.higgsfield.ai/v1/job-sets/${jobId}`,
+          {
+            headers: {
+              "hf-api-key": process.env.NEXT_PUBLIC_HF_API_KEY as string,
+              "hf-secret": process.env.NEXT_PUBLIC_HF_API_SECRET as string,
+            },
+          }
+        );
+        const j = await r.json();
+        const url = j?.jobs?.[0]?.results?.raw?.url;
+        if (url) {
+          setImageUrls((prev) => {
+            const copy = [...prev];
+            copy[editingIndex] = url;
+            return copy;
+          });
+          setEditingIndex(null);
+          setRegenLoadingMap((prev) => ({ ...prev, [editingIndex]: false }));
+        } else {
+          setTimeout(poll, 2000);
+        }
+      };
+      poll();
+      setIsModalOpen(false);
+    } catch (e) {
+      console.error(e);
+      setRegenLoadingMap((prev) => ({ ...prev, [editingIndex!]: false }));
     }
   }
 
@@ -167,7 +240,6 @@ export default function SlidePromptGenerator() {
           onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)}
           className="w-full border p-2 rounded-md text-black"
         />
-
         <button
           onClick={generatePrompts}
           disabled={loading}
@@ -177,28 +249,64 @@ export default function SlidePromptGenerator() {
             ? "Processing..."
             : skipGeneration
             ? "Upload & Animate"
-            : "Generate Prompts"}
+            : "Generate video"}
         </button>
       </div>
-
-      {error && <p className="mt-4 text-red-600">{error}</p>}
-
-      {prompts.length > 0 && !skipGeneration && (
-        <div className="mt-6 space-y-2">
-          <h2 className="text-lg font-semibold text-gray-700">
-            Generated Slide Prompts
+      {imageUrls.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">
+            Generated Slides
           </h2>
-          <ul className="list-disc list-inside text-gray-800">
-            {prompts.map((p, i) => (
-              <li key={i} className="whitespace-pre-wrap">
-                <strong>Slide {i + 1}:</strong> {p}
-              </li>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {imageUrls.map((url, i) => (
+              <div key={i} className="relative group">
+                <Image
+                  height={100}
+                  src={url}
+                  width={100}
+                  alt={`Slide ${i + 1}`}
+                  className={`rounded-md border shadow-sm w-full transition-opacity ${
+                    regenLoadingMap[i] ? "opacity-60" : ""
+                  }`}
+                />
+                {/* Spinner overlay */}
+                {regenLoadingMap[i] && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-white/60 rounded-md">
+                    <div className="h-6 w-6 border-2 border-gray-400 border-t-black rounded-full animate-spin"></div>
+                  </div>
+                )}
+                <button
+                  onClick={() => {
+                    setEditPrompt(prompts[i] ?? "");
+                    setEditingIndex(i);
+                    setIsModalOpen(true);
+                  }}
+                  disabled={!!regenLoadingMap[i]}
+                  className="absolute bottom-2 right-2 bg-black text-white text-xs px-3 py-1 rounded opacity-0 group-hover:opacity-100 transition disabled:opacity-40"
+                >
+                  Edit
+                </button>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
       )}
-
-      <Transition imageUrls={imageUrls} />
+      <ImageEditModal
+        isModalOpen={isModalOpen}
+        setIsModalOpen={setIsModalOpen}
+        editPrompt={editPrompt}
+        setEditPrompt={setEditPrompt}
+        handleRegenerate={handleRegenerate}
+        regenLoading={editingIndex !== null && !!regenLoadingMap[editingIndex]}
+      />
+      {error && <p className="mt-4 text-red-600">{error}</p>}
+      {genState === "resultReady" &&
+        imageUrls.length > 0 &&
+        Object.values(regenLoadingMap).every((v) => !v) && (
+          <div className="mt-4">
+            <Transition imageUrls={imageUrls} />
+          </div>
+        )}
     </div>
   );
 }
