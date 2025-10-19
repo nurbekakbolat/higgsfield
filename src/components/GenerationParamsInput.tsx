@@ -34,7 +34,7 @@ export const GenerationParamsInput = ({
         className="w-full border p-3 rounded-md text-black"
       />
       <div className="flex items-center gap-3">
-        <label className="text-gray-700">Slides:</label>
+        <label className="text-gray-700">Frames:</label>
         <input
           type="number"
           min={1}

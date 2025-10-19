@@ -245,7 +245,7 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
           <div key={`${job.id}-${idx}`} className="flex flex-col gap-2">
             <div className="text-sm text-gray-600">
               <div className="font-medium">
-                Pair {idx + 1} (Slide {idx + 1} - Slide {idx + 2})
+                Pair {idx + 1} (Frame {idx + 1} - Frame {idx + 2})
               </div>
             </div>
             {job.url ? (

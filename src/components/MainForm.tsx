@@ -115,7 +115,7 @@ export default function SlidePromptGenerator() {
     const userMsg =
       `Topic: ${topic.trim()}\n` +
       (style.trim() ? `Style: ${style.trim()}\n` : "Style: (default)\n") +
-      `Slide count: ${count}`;
+      `Frame count: ${count}`;
 
     try {
       let slides: string[] = [];
@@ -267,7 +267,7 @@ export default function SlidePromptGenerator() {
   return (
     <div className="max-w-2xl mx-auto mt-12 p-6 border rounded-lg bg-white shadow-sm">
       <h1 className="text-2xl font-bold mb-4 text-gray-800">
-        AI Slide Prompt Generator
+        AI Story Line Generator
       </h1>
 
       <div className="flex items-center justify-between mb-4">
@@ -314,7 +314,7 @@ export default function SlidePromptGenerator() {
       {imageUrls.length > 0 && (
         <div className="mt-8">
           <h2 className="text-lg font-semibold text-gray-800 mb-4">
-            Generated Slides
+            Generated Frames
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             {imageUrls.map((url, i) => (
@@ -323,7 +323,7 @@ export default function SlidePromptGenerator() {
                   height={100}
                   src={url}
                   width={100}
-                  alt={`Slide ${i + 1}`}
+                  alt={`Frame ${i + 1}`}
                   className={`rounded-md border shadow-sm w-full transition-opacity ${
                     regenLoadingMap[i] ? "opacity-60" : ""
                   }`}

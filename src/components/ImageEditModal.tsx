@@ -25,7 +25,7 @@ export const ImageEditModal = ({
     >
       <Dialog.Panel className="bg-white p-6 rounded-lg shadow-md w-96">
         <Dialog.Title className="font-semibold text-lg mb-2">
-          Edit & Regenerate Slide
+          Edit & Generate Frame
         </Dialog.Title>
         <textarea
           value={editPrompt}
