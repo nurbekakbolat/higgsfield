@@ -303,7 +303,10 @@ export default function SlidePromptGenerator() {
       {genState === "resultReady" &&
         imageUrls.length > 0 &&
         Object.values(regenLoadingMap).every((v) => !v) && (
-          <div className="mt-4">
+            <div className="mt-4">
+                    <h2 className="text-lg font-semibold text-gray-800 mb-4">
+              Generated Videos
+            </h2>
             <Transition imageUrls={imageUrls} />
           </div>
         )}

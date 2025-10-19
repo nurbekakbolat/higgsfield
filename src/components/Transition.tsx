@@ -230,14 +230,9 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
         {jobs.map((job, idx) => (
           <div key={`${job.id}-${idx}`} className="flex flex-col gap-2">
             <div className="text-sm text-gray-600">
-              {`Pair ${idx + 1}: `}
-              <a href={job.pair.start} className="break-all">
-                Start frame
-              </a>
-              {" → "}
-              <a href={job.pair.end} className="break-all">
-                End frame
-              </a>
+  <div className="font-medium">
+    Pair {idx + 1} (Slide {idx + 1} - Slide {idx + 2})
+  </div>
             </div>
             {job.url ? (
               <video
@@ -248,17 +243,12 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
                 className="w-full rounded"
               />
             ) : (
-              <div className="text-sm">
-                Status: <b>{job.status}</b>
-                {job.error ? (
-                  <div className="text-red-600 mt-1">{job.error}</div>
-                ) : null}
-                {running && !job.error && job.status !== "completed" ? (
-                  <div className="text-xs text-gray-500">
-                    Waiting on GPUs like everyone else.
-                  </div>
-                ) : null}
-              </div>
+            <div className="text-sm text-black">
+              Status: <b>{job.status}</b>
+              {job.error && (
+                <div className="text-red-600 mt-1">{job.error}</div>
+              )}
+            </div>
             )}
           </div>
         ))}
