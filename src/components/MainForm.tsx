@@ -22,33 +22,57 @@ export const DEFAULT_STYLE =
   "clean corporate flat infographic dashboard style, soft neutral/pastel palette (sand, sage, slate), modern sans-serif typography, subtle gradients, high whitespace";
 
 export const buildGptPrompt = (userStyle?: string) => `
-You are designing a SEQUENCE of cinematic image prompts that will be used to generate smooth, coherent AI video transitions with Seedream 4.0.
+You are an expert cinematic storyteller designing a SEQUENCE of visual scenes for an AI-generated short film.
 
-OUTPUT: return ONLY a valid JSON array of strings; each string is one full prompt. No prose, no keys.
+Each prompt describes ONE frame or shot that will later be animated using Seedream 4.0.
+The frames must connect naturally like story beats — not isolated images.
 
-ABSOLUTE RULES FOR SLIDE
-1) Start with: "PowerPoint slide background".
-   ${!userStyle ? `- STYLE: "${DEFAULT_STYLE}".` : ""}
+OUTPUT FORMAT:
+Return ONLY a valid JSON array of strings, where each string is one detailed cinematic image prompt.
+Do not include commentary, labels, or keys.
 
-2) Include ALL TEXT to render and ALL DATA.
-   - Capture everything the viewer should read or understand: titles, subtitles, labels, legends, and captions.
-   - Express information in clear, concise English unless another language is requested.
-   - Always use numerals for numbers.
-   - If a period or range is mentioned, include complete data for each point in time.
-   - Do not invent information; only use facts or data explicitly present in the source.
+OBJECTIVE:
+Generate ${"${count}"} visually coherent cinematic scenes that together tell a short, emotionally engaging story about the topic provided by the user.
 
-3) Slide composition and focus.
-  - Keep intro, end parts for presentation.
-  - Describe the main message or insight each slide conveys.
-  - Identify the key visual or comparison that supports that message (chart, map, photo, list, etc.).
-  - Prever not to use charts or diagrams.
-  - Keep structure simple and readable: one clear idea per slide, supported by evidence or data.
+GLOBAL RULES:
+1. Scene Flow:
+   - Each image represents a key visual beat in the story — like frames from a movie.
+   - Maintain continuity of characters, lighting, setting, and perspective.
+   - Smooth progression: opening → development → climax → resolution.
+   - Subtle visual changes should show emotional or narrative evolution.
 
-4) Consistency & tone: professional presentation; avoid animals/people unless requested.
+2. Cinematic Composition:
+   - Use film terms when describing perspective (wide shot, close-up, aerial, dolly, over-the-shoulder, etc.).
+   - Keep depth, atmosphere, and motion cues that feel alive.
+   - Avoid flat or diagram-like visuals — each frame should feel like a movie still.
 
-5) End every slide with: "Draw all listed text EXACTLY as written."
+3. Style:
+   - ${
+     userStyle
+       ? `Follow the user's visual style: "${userStyle}".`
+       : `Default to cinematic realism with modern color grading and soft atmospheric lighting.`
+   }
+   - 16:9 landscape, high dynamic range lighting, film-grade contrast.
+   - Color palette should stay consistent and evolve naturally.
 
-6) Add some guidance for pictures in slides 
+4. Subjects:
+   - Avoid charts, infographics, or layouts.
+   - Focus on people, objects, places, or symbolic visuals that embody the theme.
+   - Keep it coherent: same world, same tone.
+
+5. Mood and Emotion:
+   - Each scene should communicate an emotion (anticipation, awe, reflection, hope, etc.).
+   - Include subtle environmental details — light shifts, fog, reflections, or camera movement cues.
+
+6. End each scene with:
+   “cinematic lighting, 16:9 aspect ratio, coherent with previous frame, realistic atmosphere”.
+
+EXAMPLE OUTPUT:
+[
+  "Wide establishing shot of an empty train platform at dawn, cool blue light, distant fog, cinematic lighting, 16:9",
+  "Medium shot of an old train approaching through the mist, warm light cutting through fog, coherent with previous frame, cinematic lighting, 16:9",
+  "Close-up of a passenger’s hand touching the window, reflection of the sunrise, coherent with previous frame, 16:9"
+]
 `;
 
 export default function SlidePromptGenerator() {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { HG_PROMPT, HIGGSFIELD_BASE } from "~/config";
+import { HIGGSFIELD_BASE } from "~/config";
 import { buildHgPrompt } from "~/helpers/buildHgPrompt";
 import { concatVideosBrowser } from "~/helpers/concatVideos";
 
@@ -216,7 +216,7 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
       }
     })();
   }, [jobs]);
-  console.log(!imageUrls.length);
+
   return (
     <div className="flex flex-col gap-6">
       <button
@@ -267,7 +267,6 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
           </div>
         ))}
       </div>
-      {/* Merged video */}
       {merging && <p className="text-gray-500">Merging all transitions...</p>}
       {mergedUrl && (
         <div className="mt-6">
