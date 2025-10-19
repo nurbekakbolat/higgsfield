@@ -236,7 +236,7 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
         type="text"
         value={videoPrompt}
         onChange={(e) => setVideoPrompt(e.target.value)}
-        placeholder='e.g. "e.g. global warming, train history"'
+        placeholder="transition styles"
         className="w-full border p-3 rounded-md text-black"
       />
 

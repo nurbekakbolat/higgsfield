@@ -8,7 +8,7 @@ import { pollManyJobsUntilComplete } from "./PollingHelpers";
 import Transition from "./Transition";
 import { splitAndUpload } from "~/helpers/splitAndUpload";
 import type { ChatCompletion } from "openai/resources";
-import { GPT_PROMPT_ENHANCE, SlidePromptsSchema } from "~/config";
+import { buildGptPresPrompt, SlidePromptsSchema } from "~/config";
 import { GenerationParamsInput } from "./GenerationParamsInput";
 import { ImageEditModal } from "./ImageEditModal";
 import Image from "next/image";
@@ -22,56 +22,56 @@ export const DEFAULT_STYLE =
   "clean corporate flat infographic dashboard style, soft neutral/pastel palette (sand, sage, slate), modern sans-serif typography, subtle gradients, high whitespace";
 
 export const buildGptPrompt = (userStyle?: string) => `
-You are an expert cinematic storyteller designing a SEQUENCE of visual scenes for an AI-generated short film.
+You are an expert cinematic storyteller and visual director designing a SEQUENCE of consistent, emotionally coherent scenes for a short AI-generated film.
 
-Each prompt describes ONE frame or shot that will later be animated using Seedream 4.0.
-The frames must connect naturally like story beats — not isolated images.
+Each prompt represents ONE frame — a full cinematic image — to be rendered independently by Seedream 4.0 (which has no memory).  
+Therefore, every prompt must REPEAT the global visual style, environment, and lighting setup to maintain continuity.
 
 OUTPUT FORMAT:
-Return ONLY a valid JSON array of strings, where each string is one detailed cinematic image prompt.
-Do not include commentary, labels, or keys.
+Return ONLY a valid JSON array of strings.
+Each string is a single complete cinematic prompt describing one scene.
 
 OBJECTIVE:
-Generate ${"${count}"} visually coherent cinematic scenes that together tell a short, emotionally engaging story about the topic provided by the user.
+Generate ${"${count}"} sequential cinematic frames that visually tell a short narrative around the user's topic.
 
-GLOBAL RULES:
-1. Scene Flow:
-   - Each image represents a key visual beat in the story — like frames from a movie.
-   - Maintain continuity of characters, lighting, setting, and perspective.
-   - Smooth progression: opening → development → climax → resolution.
-   - Subtle visual changes should show emotional or narrative evolution.
+GLOBAL STYLE (to be repeated in every frame):
+${
+  userStyle
+    ? `Use the user's style exactly: "${userStyle}". Integrate it naturally into every scene description.`
+    : `Default to cinematic realism: soft atmospheric lighting, film-grade depth, pastel palette (sand, slate, sage, cream), subtle gradients, realistic reflections, and shallow depth of field.`
+}
+All frames must share the same tone, palette, and environment evolution.
+Lighting continuity (e.g., dawn → noon → dusk) should progress smoothly if the story allows.
 
-2. Cinematic Composition:
-   - Use film terms when describing perspective (wide shot, close-up, aerial, dolly, over-the-shoulder, etc.).
-   - Keep depth, atmosphere, and motion cues that feel alive.
-   - Avoid flat or diagram-like visuals — each frame should feel like a movie still.
+CAMERA & COMPOSITION:
+- 16:9 landscape ratio.
+- Use cinematic shot types: establishing shot, medium, close-up, dolly, tilt, pan, or aerial.
+- Include natural motion cues and lens realism (bokeh, glare, reflections, dust, fog).
 
-3. Style:
-   - ${
-     userStyle
-       ? `Follow the user's visual style: "${userStyle}".`
-       : `Default to cinematic realism with modern color grading and soft atmospheric lighting.`
-   }
-   - 16:9 landscape, high dynamic range lighting, film-grade contrast.
-   - Color palette should stay consistent and evolve naturally.
+NARRATIVE RULES:
+1. Each frame represents a visual beat in the same world — no abrupt changes of characters or style.
+2. Use consistent subject matter and environment details.
+3. Focus on emotional storytelling through light, framing, and motion — not text or narration.
+4. Avoid diagrams, text, or symbolic icons unless explicitly requested by the user.
 
-4. Subjects:
-   - Avoid charts, infographics, or layouts.
-   - Focus on people, objects, places, or symbolic visuals that embody the theme.
-   - Keep it coherent: same world, same tone.
+MOOD & EMOTION:
+Keep cinematic pacing and tone progression (calm → tension → resolution or similar).
+Describe subtle emotional cues via environment (light shifts, color tone, atmosphere).
 
-5. Mood and Emotion:
-   - Each scene should communicate an emotion (anticipation, awe, reflection, hope, etc.).
-   - Include subtle environmental details — light shifts, fog, reflections, or camera movement cues.
-
-6. End each scene with:
-   “cinematic lighting, 16:9 aspect ratio, coherent with previous frame, realistic atmosphere”.
+END EVERY FRAME PROMPT WITH:
+"same cinematic style, consistent color palette, realistic atmosphere, 16:9 aspect ratio."
 
 EXAMPLE OUTPUT:
 [
-  "Wide establishing shot of an empty train platform at dawn, cool blue light, distant fog, cinematic lighting, 16:9",
-  "Medium shot of an old train approaching through the mist, warm light cutting through fog, coherent with previous frame, cinematic lighting, 16:9",
-  "Close-up of a passenger’s hand touching the window, reflection of the sunrise, coherent with previous frame, 16:9"
+  "Wide establishing shot of a lone traveler walking through misty mountains under golden dawn light, ${
+    userStyle || "cinematic realism, pastel tones, soft haze, 16:9"
+  }",
+  "Medium shot of the traveler stopping at a broken bridge, wind moving the trees, ${
+    userStyle || "cinematic realism, pastel tones, soft haze, 16:9"
+  }",
+  "Close-up of the traveler's face reflecting hope as the clouds part, ${
+    userStyle || "cinematic realism, pastel tones, soft haze, 16:9"
+  }"
 ]
 `;
 
@@ -83,6 +83,7 @@ export default function SlidePromptGenerator() {
   const [genState, setGenState] = useState<
     "promptGen" | "imagesGen" | "resultGen" | "resultReady" | "idle"
   >("idle");
+  const [useDefaultStoryline, setUseDefaultStoryline] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
@@ -117,6 +118,10 @@ export default function SlidePromptGenerator() {
       (style.trim() ? `Style: ${style.trim()}\n` : "Style: (default)\n") +
       `Frame count: ${count}`;
 
+    const selectedPrompt = useDefaultStoryline
+      ? buildGptPrompt(style.trim())
+      : buildGptPresPrompt(style.trim());
+
     try {
       let slides: string[] = [];
 
@@ -133,7 +138,7 @@ export default function SlidePromptGenerator() {
           input: [
             {
               role: "system",
-              content: [{ type: "input_text", text: GPT_PROMPT_ENHANCE }],
+              content: [{ type: "input_text", text: selectedPrompt }],
             },
             {
               role: "user",
@@ -171,7 +176,7 @@ export default function SlidePromptGenerator() {
           {
             model: "gpt-4o-mini",
             messages: [
-              { role: "system", content: buildGptPrompt(style.trim()) },
+              { role: "system", content: selectedPrompt },
               { role: "user", content: userMsg },
             ],
             response_format: zodResponseFormat(
@@ -269,6 +274,18 @@ export default function SlidePromptGenerator() {
       <h1 className="text-2xl font-bold mb-4 text-gray-800">
         AI Story Line Generator
       </h1>
+
+      <div className="flex items-center justify-between mb-4">
+        <label className="text-gray-800 font-medium">
+          Use default cinematic storyline
+        </label>
+        <input
+          type="checkbox"
+          checked={useDefaultStoryline}
+          onChange={(e) => setUseDefaultStoryline(e.target.checked)}
+          className="w-5 h-5 cursor-pointer"
+        />
+      </div>
 
       <div className="flex items-center justify-between mb-4">
         <label className="text-gray-800 font-medium">
