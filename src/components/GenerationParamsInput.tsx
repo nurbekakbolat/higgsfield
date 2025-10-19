@@ -26,7 +26,6 @@ export const GenerationParamsInput = ({
         placeholder='e.g. "e.g. global warming, train history"'
         className="w-full border p-3 rounded-md text-black"
       />
-
       <input
         type="text"
         value={style}
@@ -34,7 +33,6 @@ export const GenerationParamsInput = ({
         placeholder='Optional style, e.g. "isometric 3D corporate", "modern tech style"'
         className="w-full border p-3 rounded-md text-black"
       />
-
       <div className="flex items-center gap-3">
         <label className="text-gray-700">Slides:</label>
         <input

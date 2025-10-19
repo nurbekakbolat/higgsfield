@@ -22,7 +22,7 @@ export const DEFAULT_STYLE =
   "clean corporate flat infographic dashboard style, soft neutral/pastel palette (sand, sage, slate), modern sans-serif typography, subtle gradients, high whitespace";
 
 export const buildGptPrompt = (userStyle?: string) => `
-You are producing COMPLETE Seedream 4.0 image prompts for slides. The image model has ZERO MEMORY.
+You are designing a SEQUENCE of cinematic image prompts that will be used to generate smooth, coherent AI video transitions with Seedream 4.0.
 
 OUTPUT: return ONLY a valid JSON array of strings; each string is one full prompt. No prose, no keys.
 
@@ -72,8 +72,6 @@ export default function SlidePromptGenerator() {
     Record<number, boolean>
   >({});
 
-  
-
   async function generatePrompts() {
     if (!topic.trim() && !pdfFile) return;
     setLoading(true);
@@ -83,6 +81,8 @@ export default function SlidePromptGenerator() {
     if (skipGeneration && pdfFile) {
       const urls = await splitAndUpload(pdfFile);
       setImageUrls(urls);
+      console.log("urls", urls);
+      setGenState("resultReady");
       setPrompts([]); // skip GPT
       setLoading(false);
       return;
@@ -148,7 +148,7 @@ export default function SlidePromptGenerator() {
             model: "gpt-4o-mini",
             messages: [
               { role: "system", content: buildGptPrompt(style.trim()) },
-              { role: "user", content: userMsg }
+              { role: "user", content: userMsg },
             ],
             response_format: zodResponseFormat(
               SlidePromptsSchema,
@@ -338,8 +338,8 @@ export default function SlidePromptGenerator() {
       {genState === "resultReady" &&
         imageUrls.length > 0 &&
         Object.values(regenLoadingMap).every((v) => !v) && (
-            <div className="mt-4">
-                    <h2 className="text-lg font-semibold text-gray-800 mb-4">
+          <div className="mt-4">
+            <h2 className="text-lg font-semibold text-gray-800 mb-4">
               Generated Videos
             </h2>
             <Transition imageUrls={imageUrls} />

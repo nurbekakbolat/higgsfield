@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { HG_PROMPT, HIGGSFIELD_BASE } from "~/config";
+import { buildHgPrompt } from "~/helpers/buildHgPrompt";
 import { concatVideosBrowser } from "~/helpers/concatVideos";
 
 type JobStatus = "queued" | "processing" | "completed" | "failed" | "error";
@@ -24,6 +25,7 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
   const [running, setRunning] = useState(false);
   const [mergedUrl, setMergedUrl] = useState<string | null>(null);
   const [merging, setMerging] = useState(false);
+  const [videoPrompt, setVideoPrompt] = useState("");
 
   const headers = {
     "Content-Type": "application/json",
@@ -45,7 +47,7 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
       headers,
       body: JSON.stringify({
         params: {
-          prompt: HG_PROMPT,
+          prompt: buildHgPrompt(videoPrompt),
           duration: 6,
           resolution: "1080",
           input_image: { type: "image_url", image_url: pair.start },
@@ -190,11 +192,11 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
     setRunning(false);
   };
 
-  useEffect(() => {
-    if (!imageUrls.length) return;
-    runAllParallel();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [imageUrls.join("|")]); // re-run if list changes content
+  // useEffect(() => {
+  //   if (!imageUrls.length) return;
+  //   runAllParallel();
+  //   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // }, [imageUrls.join("|")]); // re-run if list changes content
 
   useEffect(() => {
     const allDone =
@@ -214,25 +216,37 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
       }
     })();
   }, [jobs]);
-
+  console.log(!imageUrls.length);
   return (
     <div className="flex flex-col gap-6">
       <button
         onClick={runAllParallel}
-        disabled={running}
+        disabled={running || !imageUrls.length}
         className="self-start rounded-md bg-gray-200 px-4 py-2 text-sm font-medium text-gray-700
              hover:bg-gray-300 active:bg-gray-400 disabled:bg-gray-100 disabled:text-gray-400
              transition-colors duration-150"
       >
-        {running ? "Generating..." : "Regenerate transitions"}
+        {!imageUrls.length
+          ? "No images to generate"
+          : running
+          ? "Generating..."
+          : "Regenerate transitions"}
       </button>
+      <input
+        type="text"
+        value={videoPrompt}
+        onChange={(e) => setVideoPrompt(e.target.value)}
+        placeholder='e.g. "e.g. global warming, train history"'
+        className="w-full border p-3 rounded-md text-black"
+      />
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {jobs.map((job, idx) => (
           <div key={`${job.id}-${idx}`} className="flex flex-col gap-2">
             <div className="text-sm text-gray-600">
-  <div className="font-medium">
-    Pair {idx + 1} (Slide {idx + 1} - Slide {idx + 2})
-  </div>
+              <div className="font-medium">
+                Pair {idx + 1} (Slide {idx + 1} - Slide {idx + 2})
+              </div>
             </div>
             {job.url ? (
               <video
@@ -243,12 +257,12 @@ export default function Transition({ imageUrls }: { imageUrls: string[] }) {
                 className="w-full rounded"
               />
             ) : (
-            <div className="text-sm text-black">
-              Status: <b>{job.status}</b>
-              {job.error && (
-                <div className="text-red-600 mt-1">{job.error}</div>
-              )}
-            </div>
+              <div className="text-sm text-black">
+                Status: <b>{job.status}</b>
+                {job.error && (
+                  <div className="text-red-600 mt-1">{job.error}</div>
+                )}
+              </div>
             )}
           </div>
         ))}
