@@ -23,7 +23,7 @@ export const GenerationParamsInput = ({
         type="text"
         value={topic}
         onChange={(e) => setTopic(e.target.value)}
-        placeholder='e.g. "create 6 slides about global warming"'
+        placeholder='e.g. "e.g. global warming, train history"'
         className="w-full border p-3 rounded-md text-black"
       />
 
@@ -31,7 +31,7 @@ export const GenerationParamsInput = ({
         type="text"
         value={style}
         onChange={(e) => setStyle(e.target.value)}
-        placeholder='Optional style, e.g. "isometric 3D corporate", or leave blank'
+        placeholder='Optional style, e.g. "isometric 3D corporate", "modern tech style"'
         className="w-full border p-3 rounded-md text-black"
       />
 
